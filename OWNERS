@@ -3,7 +3,8 @@ subcomponent: "Other Providers"
 approvers:
   - enxebre
   - michaelgugino
-  - alexander-demichev
-  - Danil-Grigorev
   - JoelSpeed
   - elmiko
+  - alexander-demichev
+  - lobziik
+  - Fedosin

@@ -8,9 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	machineapierros "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	awsclient "sigs.k8s.io/cluster-api-provider-aws/pkg/client"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 

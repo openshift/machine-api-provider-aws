@@ -22,10 +22,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/openshift/machine-api-provider-aws/pkg/termination"
+	"github.com/openshift/machine-api-provider-aws/pkg/version"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/termination"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/version"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )

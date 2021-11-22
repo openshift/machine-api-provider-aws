@@ -291,6 +291,7 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 		return nil, err
 	}
 
+	replicas := int32(1)
 	return &machinev1.MachineSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations:  annotations,
@@ -298,6 +299,7 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 			Namespace:    namespace,
 		},
 		Spec: machinev1.MachineSetSpec{
+			Replicas: &replicas,
 			Template: machinev1.MachineTemplateSpec{
 				Spec: machinev1.MachineSpec{
 					ProviderSpec: providerSpec,

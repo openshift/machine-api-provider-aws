@@ -147,7 +147,7 @@ func TestPatchMachine(t *testing.T) {
 	g := NewWithT(t)
 
 	testEnv := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1")},
 	}
 
 	cfg, err := testEnv.Start()

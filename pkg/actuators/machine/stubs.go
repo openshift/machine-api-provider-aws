@@ -227,6 +227,18 @@ func stubDedicatedInstanceTenancy() *machinev1.AWSMachineProviderConfig {
 	return pc
 }
 
+func stubEFANetworkInterfaceType() *machinev1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.NetworkInterfaceType = machinev1.AWSEFANetworkInterfaceType
+	return pc
+}
+
+func stubInvalidNetworkInterfaceType() *machinev1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.NetworkInterfaceType = "invalid"
+	return pc
+}
+
 func stubInvalidInstanceTenancy() *machinev1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Placement.Tenancy = "invalid"

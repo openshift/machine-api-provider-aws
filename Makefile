@@ -12,36 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#
+# Directories.
+#
+BIN_DIR := bin
+TOOLS_DIR := hack/tools
+TOOLS_BIN_DIR := $(TOOLS_DIR)/$(BIN_DIR)
+
+#
+# Build.
+#
 GO111MODULE = on
 export GO111MODULE
 GOFLAGS ?= -mod=vendor
 export GOFLAGS
 GOPROXY ?=
 export GOPROXY
-
 DBG ?= 0
-
 ifeq ($(DBG),1)
 GOGCFLAGS ?= -gcflags=all="-N -l"
 endif
-
 GOARCH  ?= $(shell go env GOARCH)
 GOOS    ?= $(shell go env GOOS)
-
 VERSION     ?= $(shell git describe --always --abbrev=7)
 REPO_PATH   ?= sigs.k8s.io/cluster-api-provider-aws
 LD_FLAGS    ?= -X $(REPO_PATH)/pkg/version.Raw=$(VERSION) -extldflags "-static"
 MUTABLE_TAG ?= latest
 IMAGE        = origin-aws-machine-controllers
 BUILD_IMAGE ?= registry.ci.openshift.org/openshift/release:golang-1.17
-
-# race tests need CGO_ENABLED, everything else should have it disabled
-CGO_ENABLED = 0
-unit : CGO_ENABLED = 1
-
-.PHONY: all
-all: generate build images check
-
 NO_DOCKER ?= 0
 
 ifeq ($(shell command -v podman > /dev/null 2>&1 ; echo $$? ), 0)
@@ -61,13 +59,36 @@ ifeq ($(NO_DOCKER), 1)
   DOCKER_CMD = CGO_ENABLED=$(CGO_ENABLED) GOARCH=$(GOARCH) GOOS=$(GOOS)
   IMAGE_BUILD_CMD = imagebuilder
 else
-  DOCKER_CMD = $(ENGINE) run --rm -e CGO_ENABLED=$(CGO_ENABLED) -e GOARCH=$(GOARCH) -e GOOS=$(GOOS) -v "$(PWD)":/go/src/sigs.k8s.io/cluster-api-provider-aws:Z -w /go/src/sigs.k8s.io/cluster-api-provider-aws $(BUILD_IMAGE)
+  DOCKER_CMD = $(ENGINE) run --rm -e CGO_ENABLED=$(CGO_ENABLED) -e GOARCH=arm64 -e GOOS=linux -v "$(PWD)":/go/src/sigs.k8s.io/cluster-api-provider-aws:Z -w /go/src/sigs.k8s.io/cluster-api-provider-aws $(BUILD_IMAGE)
   IMAGE_BUILD_CMD = $(ENGINE) build
 endif
+
+#
+# Kubebuilder.
+#
+export KUBEBUILDER_ENVTEST_KUBERNETES_VERSION ?= 1.22.0
+export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT ?= 60s
+export KUBEBUILDER_CONTROLPLANE_STOP_TIMEOUT ?= 60s
+
+#
+# Binaries.
+#
+SETUP_ENVTEST := $(abspath $(TOOLS_BIN_DIR)/setup-envtest)
+
+$(SETUP_ENVTEST): $(TOOLS_DIR)/go.mod # Build setup-envtest from tools folder.
+	cd $(TOOLS_DIR); go build -tags=tools -mod=readonly -o $(BIN_DIR)/setup-envtest sigs.k8s.io/controller-runtime/tools/setup-envtest
+
+# race tests need CGO_ENABLED, everything else should have it disabled
+CGO_ENABLED = 0
+unit : CGO_ENABLED = 1
+
+.PHONY: all
+all: generate build images check
 
 .PHONY: vendor
 vendor:
 	$(DOCKER_CMD) hack/go-mod.sh
+
 .PHONY: generate
 generate: gogen goimports
 
@@ -84,9 +105,9 @@ bin:
 
 .PHONY: build
 build: ## build binaries
-	$(DOCKER_CMD) go build $(GOGCFLAGS) -o "bin/machine-controller-manager" \
+	$(DOCKER_CMD) go build $(GOGCFLAGS) -o "$(BIN_DIR)/machine-controller-manager" \
                -ldflags "$(LD_FLAGS)" "$(REPO_PATH)/cmd/manager"
-	$(DOCKER_CMD) go build  $(GOGCFLAGS) -o "bin/termination-handler" \
+	$(DOCKER_CMD) go build  $(GOGCFLAGS) -o "$(BIN_DIR)/termination-handler" \
 	             -ldflags "$(LD_FLAGS)" "$(REPO_PATH)/cmd/termination-handler"
 
 .PHONY: images
@@ -104,9 +125,11 @@ push:
 .PHONY: check
 check: fmt vet lint test # Check your code
 
+KUBEBUILDER_ASSETS ?= $(shell $(SETUP_ENVTEST) use --use-env -p path $(KUBEBUILDER_ENVTEST_KUBERNETES_VERSION))
+
 .PHONY: unit
-unit: # Run unit test
-	$(DOCKER_CMD) go test -race -cover ./cmd/... ./pkg/...
+unit: $(SETUP_ENVTEST) # Run unit test
+	KUBEBUILDER_ASSETS="$(KUBEBUILDER_ASSETS)" $(DOCKER_CMD) go test -race -cover ./cmd/... ./pkg/...
 
 .PHONY: test-e2e
 test-e2e: ## Run e2e tests

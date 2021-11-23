@@ -18,10 +18,13 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# Ensure that some home var is set and that it's not the root
+export HOME=${HOME:=/tmp/kubebuilder-testing}
+if [ $HOME == "/" ]; then
+  export HOME=/tmp/kubebuilder-testing
+fi
+
 REPO_ROOT=$(dirname "${BASH_SOURCE}")/..
 
 cd $REPO_ROOT && \
-	source ./hack/fetch-ext-bins.sh && \
-	fetch_tools && \
-	setup_envs && \
 	make unit

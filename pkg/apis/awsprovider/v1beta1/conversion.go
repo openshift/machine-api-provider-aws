@@ -1,6 +1,6 @@
 package v1beta1
 
-import "sigs.k8s.io/cluster-api-provider-aws/pkg/actuators/machine"
+import "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
 
 var (
 	// RawExtensionFromProviderSpec marshals AWSMachineProviderConfig into a raw extension type.

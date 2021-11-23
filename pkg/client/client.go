@@ -24,9 +24,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/openshift/machine-api-provider-aws/pkg/version"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/cluster-api-provider-aws/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/aws/aws-sdk-go/aws"

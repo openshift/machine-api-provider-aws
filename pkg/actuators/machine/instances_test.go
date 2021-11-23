@@ -11,7 +11,7 @@ import (
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
-	mockaws "sigs.k8s.io/cluster-api-provider-aws/pkg/client/mock"
+	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

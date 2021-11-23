@@ -16,8 +16,8 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
+	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	"k8s.io/klog/v2"
-	awsclient "sigs.k8s.io/cluster-api-provider-aws/pkg/client"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 

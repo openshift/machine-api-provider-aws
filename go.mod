@@ -1,4 +1,4 @@
-module sigs.k8s.io/cluster-api-provider-aws
+module github.com/openshift/machine-api-provider-aws
 
 go 1.17
 

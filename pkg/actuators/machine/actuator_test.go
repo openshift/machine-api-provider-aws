@@ -29,6 +29,7 @@ func init() {
 }
 
 func TestMachineEvents(t *testing.T) {
+	instanceID := "i-02fcb933c5da7085c"
 	g := NewWithT(t)
 
 	awsCredentialsSecret := stubAwsCredentialsSecret()
@@ -50,6 +51,7 @@ func TestMachineEvents(t *testing.T) {
 		event               string
 		awsError            bool
 		invalidMachineScope bool
+		setInstanceID       bool
 	}{
 		{
 			name: "Create machine event failed on invalid machine scope",
@@ -102,7 +104,8 @@ func TestMachineEvents(t *testing.T) {
 				actuator.Update(context.TODO(), machine)
 				actuator.Update(context.TODO(), machine)
 			},
-			event: "Updated Machine aws-actuator-testing-machine",
+			setInstanceID: true, // This implies the machine was already created
+			event:         "Updated Machine aws-actuator-testing-machine",
 		},
 		{
 			name: "Delete machine event failed on invalid machine scope",
@@ -127,6 +130,7 @@ func TestMachineEvents(t *testing.T) {
 			operation: func(actuator *Actuator, machine *machinev1.Machine) {
 				actuator.Delete(context.TODO(), machine)
 			},
+			setInstanceID:       true, // This implies the machine was already created
 			event:               "Deleted machine aws-actuator-testing-machine",
 			invalidMachineScope: false,
 			awsError:            false,
@@ -173,13 +177,37 @@ func TestMachineEvents(t *testing.T) {
 				}
 			}
 
+			if tc.setInstanceID {
+				updateInstanceID := func() error {
+					if getMachine(); err != nil {
+						return err
+					}
+
+					ps, err := ProviderStatusFromRawExtension(machine.Status.ProviderStatus)
+					if err != nil {
+						return err
+					}
+					ps.InstanceID = &instanceID
+
+					raw, err := RawExtensionFromProviderStatus(ps)
+					if err != nil {
+						return err
+					}
+					machine.Status.ProviderStatus = raw
+
+					return k8sClient.Status().Update(ctx, machine)
+				}
+				gs.Eventually(updateInstanceID, timeout).Should(Succeed())
+			}
+
 			if tc.awsError {
 				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(nil, errors.New("AWS error")).AnyTimes()
 			} else {
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("ami-a9acbbd6", "i-02fcb933c5da7085c", ec2.InstanceStateNameRunning, "192.168.0.10"), nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"), nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
 			}
 
-			mockAWSClient.EXPECT().RunInstances(gomock.Any()).Return(stubReservation("ami-a9acbbd6", "i-02fcb933c5da7085c", "192.168.0.10"), nil).AnyTimes()
+			mockAWSClient.EXPECT().RunInstances(gomock.Any()).Return(stubReservation("ami-a9acbbd6", instanceID, "192.168.0.10"), nil).AnyTimes()
 			mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
 			mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).Return(nil, nil).AnyTimes()
 			mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()

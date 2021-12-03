@@ -8,3 +8,5 @@ RUN unset VERSION \
 FROM registry.ci.openshift.org/ocp/4.10:base
 COPY --from=builder /go/src/github.com/openshift/machine-api-provider-aws/bin/machine-controller-manager /
 COPY --from=builder /go/src/github.com/openshift/machine-api-provider-aws/bin/termination-handler /
+
+LABEL io.openshift.release.operator true

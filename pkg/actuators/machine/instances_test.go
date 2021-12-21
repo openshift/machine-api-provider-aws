@@ -1008,6 +1008,7 @@ func TestCorrectExistingTags(t *testing.T) {
 	testCases := []struct {
 		name               string
 		tags               []*ec2.Tag
+		userTags           map[string]string
 		expectedCreateTags bool
 	}{
 		{
@@ -1023,6 +1024,40 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: false,
+		},
+		{
+			name: "Valid Tags and Create",
+			tags: []*ec2.Tag{
+				{
+					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+					Value: aws.String("owned"),
+				},
+				{
+					Key:   aws.String("Name"),
+					Value: aws.String(machine.Name),
+				},
+			},
+			expectedCreateTags: true,
+			userTags:           map[string]string{"UserDefinedTag2": "UserDefinedTagValue2"},
+		},
+		{
+			name: "Valid Tags and Update",
+			tags: []*ec2.Tag{
+				{
+					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+					Value: aws.String("owned"),
+				},
+				{
+					Key:   aws.String("Name"),
+					Value: aws.String(machine.Name),
+				},
+				{
+					Key:   aws.String("UserDefinedTag1"),
+					Value: aws.String("UserDefinedTagValue1"),
+				},
+			},
+			expectedCreateTags: true,
+			userTags:           map[string]string{"UserDefinedTag1": "ModifiedValue"},
 		},
 		{
 			name: "Invalid Name Tag Correct Cluster",
@@ -1084,7 +1119,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).MinTimes(1)
 			}
 
-			err := correctExistingTags(machine, &instance, mockAWSClient)
+			err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}

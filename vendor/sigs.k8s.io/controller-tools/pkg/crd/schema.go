@@ -17,6 +17,7 @@ limitations under the License.
 package crd
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -38,12 +39,10 @@ const (
 	defPrefix = "#/definitions/"
 )
 
-var (
-	// byteType is the types.Type for byte (see the types documention
-	// for why we need to look this up in the Universe), saved
-	// for quick comparison.
-	byteType = types.Universe.Lookup("byte").Type()
-)
+// byteType is the types.Type for byte (see the types documention
+// for why we need to look this up in the Universe), saved
+// for quick comparison.
+var byteType = types.Universe.Lookup("byte").Type()
 
 // SchemaMarker is any marker that needs to modify the schema of the underlying type or field.
 type SchemaMarker interface {
@@ -308,14 +307,12 @@ func mapToSchema(ctx *schemaContext, mapType *ast.MapType) *apiext.JSONSchemaPro
 		valSchema = namedToSchema(ctx.ForInfo(&markers.TypeInfo{}), val)
 	case *ast.ArrayType:
 		valSchema = arrayToSchema(ctx.ForInfo(&markers.TypeInfo{}), val)
-		if valSchema.Type == "array" && valSchema.Items.Schema.Type != "string" {
-			ctx.pkg.AddError(loader.ErrFromNode(fmt.Errorf("map values must be a named type, not %T", mapType.Value), mapType.Value))
-			return &apiext.JSONSchemaProps{}
-		}
 	case *ast.StarExpr:
 		valSchema = typeToSchema(ctx.ForInfo(&markers.TypeInfo{}), val)
+	case *ast.MapType:
+		valSchema = typeToSchema(ctx.ForInfo(&markers.TypeInfo{}), val)
 	default:
-		ctx.pkg.AddError(loader.ErrFromNode(fmt.Errorf("map values must be a named type, not %T", mapType.Value), mapType.Value))
+		ctx.pkg.AddError(loader.ErrFromNode(fmt.Errorf("not a supported map value type: %T", mapType.Value), mapType.Value))
 		return &apiext.JSONSchemaProps{}
 	}
 
@@ -425,10 +422,13 @@ func builtinToType(basic *types.Basic, allowDangerousTypes bool) (typ string, fo
 		typ = "string"
 	case basicInfo&types.IsInteger != 0:
 		typ = "integer"
-	case basicInfo&types.IsFloat != 0 && allowDangerousTypes:
-		typ = "number"
+	case basicInfo&types.IsFloat != 0:
+		if allowDangerousTypes {
+			typ = "number"
+		} else {
+			return "", "", errors.New("found float, the usage of which is highly discouraged, as support for them varies across languages. Please consider serializing your float as string instead. If you are really sure you want to use them, re-run with crd:allowDangerousTypes=true")
+		}
 	default:
-		// NB(directxman12): floats are *NOT* allowed in kubernetes APIs
 		return "", "", fmt.Errorf("unsupported type %q", basic.String())
 	}
 

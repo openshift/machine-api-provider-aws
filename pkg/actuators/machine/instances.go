@@ -355,13 +355,13 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 
 	var placement *ec2.Placement
 	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
-		placement = &ec2.Placement{
-			AvailabilityZone: aws.String(machineProviderConfig.Placement.AvailabilityZone),
+		if placement == nil {
+			placement = &ec2.Placement{}
 		}
+		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
 	}
 
 	instanceTenancy := machineProviderConfig.Placement.Tenancy
-
 	switch instanceTenancy {
 	case "":
 		// Do nothing when not set
@@ -369,14 +369,26 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		if placement == nil {
 			placement = &ec2.Placement{}
 		}
-		tenancy := string(instanceTenancy)
-		placement.Tenancy = &tenancy
+		placement.SetTenancy(string(instanceTenancy))
 	default:
 		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
 			instanceTenancy,
 			machinev1.DefaultTenancy,
 			machinev1.DedicatedTenancy,
 			machinev1.HostTenancy)
+	}
+
+	if machineProviderConfig.Placement.GroupName != "" {
+		if placement == nil {
+			placement = &ec2.Placement{}
+		}
+		placement.SetGroupName(machineProviderConfig.Placement.GroupName)
+	}
+	if machineProviderConfig.Placement.Partition != nil && machineProviderConfig.Placement.Partition.Number != 0 {
+		if placement == nil {
+			placement = &ec2.Placement{}
+		}
+		placement.SetPartitionNumber(int64(machineProviderConfig.Placement.Partition.Number))
 	}
 
 	inputConfig := ec2.RunInstancesInput{

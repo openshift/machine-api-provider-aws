@@ -10,6 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -25,6 +26,7 @@ import (
 func init() {
 	// Add types to scheme
 	machinev1beta1.AddToScheme(scheme.Scheme)
+	machinev1.Install(scheme.Scheme)
 	configv1.AddToScheme(scheme.Scheme)
 }
 

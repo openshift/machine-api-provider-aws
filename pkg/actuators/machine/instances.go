@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -13,10 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog/v2"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -278,21 +281,21 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 	return blockDeviceMappings, nil
 }
 
-func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, userData []byte, client awsclient.Client, infra *configv1.Infrastructure) (*ec2.Instance, error) {
+func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, userData []byte, awsClient awsclient.Client, client runtimeclient.Client, infra *configv1.Infrastructure) (*ec2.Instance, error) {
 	machineKey := runtimeclient.ObjectKey{
 		Name:      machine.Name,
 		Namespace: machine.Namespace,
 	}
-	amiID, err := getAMI(machineKey, machineProviderConfig.AMI, client)
+	amiID, err := getAMI(machineKey, machineProviderConfig.AMI, awsClient)
 	if err != nil {
 		return nil, mapierrors.InvalidMachineConfiguration("error getting AMI: %v", err)
 	}
 
-	securityGroupsIDs, err := getSecurityGroupsIDs(machineProviderConfig.SecurityGroups, client)
+	securityGroupsIDs, err := getSecurityGroupsIDs(machineProviderConfig.SecurityGroups, awsClient)
 	if err != nil {
 		return nil, mapierrors.InvalidMachineConfiguration("error getting security groups IDs: %v", err)
 	}
-	subnetIDs, err := getSubnetIDs(machineKey, machineProviderConfig.Subnet, machineProviderConfig.Placement.AvailabilityZone, client)
+	subnetIDs, err := getSubnetIDs(machineKey, machineProviderConfig.Subnet, machineProviderConfig.Placement.AvailabilityZone, awsClient)
 	if err != nil {
 		return nil, mapierrors.InvalidMachineConfiguration("error getting subnet IDs: %v", err)
 	}
@@ -322,7 +325,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		return nil, mapierrors.InvalidMachineConfiguration("invalid value for networkInterfaceType %q, valid values are \"\", \"ENA\" and \"EFA\"", machineProviderConfig.NetworkInterfaceType)
 	}
 
-	blockDeviceMappings, err := getBlockDeviceMappings(machineKey, machineProviderConfig.BlockDevices, *amiID, client)
+	blockDeviceMappings, err := getBlockDeviceMappings(machineKey, machineProviderConfig.BlockDevices, *amiID, awsClient)
 	if err != nil {
 		return nil, mapierrors.InvalidMachineConfiguration("error getting blockDeviceMappings: %v", err)
 	}
@@ -353,30 +356,9 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		}
 	}
 
-	var placement *ec2.Placement
-	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
-		placement = &ec2.Placement{
-			AvailabilityZone: aws.String(machineProviderConfig.Placement.AvailabilityZone),
-		}
-	}
-
-	instanceTenancy := machineProviderConfig.Placement.Tenancy
-
-	switch instanceTenancy {
-	case "":
-		// Do nothing when not set
-	case machinev1beta1.DefaultTenancy, machinev1beta1.DedicatedTenancy, machinev1beta1.HostTenancy:
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		tenancy := string(instanceTenancy)
-		placement.Tenancy = &tenancy
-	default:
-		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
-			instanceTenancy,
-			machinev1beta1.DefaultTenancy,
-			machinev1beta1.DedicatedTenancy,
-			machinev1beta1.HostTenancy)
+	placement, err := constructInstancePlacement(machine, machineProviderConfig, client)
+	if err != nil {
+		return nil, err
 	}
 
 	inputConfig := ec2.RunInstancesInput{
@@ -397,7 +379,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 	if len(blockDeviceMappings) > 0 {
 		inputConfig.BlockDeviceMappings = blockDeviceMappings
 	}
-	runResult, err := client.RunInstances(&inputConfig)
+	runResult, err := awsClient.RunInstances(&inputConfig)
 	if err != nil {
 		metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 			Name:      machine.Name,
@@ -524,4 +506,51 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachinePr
 	instanceMarketOptionsRequest.SetSpotOptions(spotOptions)
 
 	return instanceMarketOptionsRequest
+}
+
+// constructInstancePlacement configures the placement options for the RunInstances request
+func constructInstancePlacement(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, client runtimeclient.Client) (*ec2.Placement, error) {
+	placement := &ec2.Placement{}
+	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
+		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
+	}
+
+	instanceTenancy := machineProviderConfig.Placement.Tenancy
+	switch instanceTenancy {
+	case "":
+		// Do nothing when not set
+	case machinev1beta1.DefaultTenancy, machinev1beta1.DedicatedTenancy, machinev1beta1.HostTenancy:
+		placement.SetTenancy(string(instanceTenancy))
+	default:
+		return nil, mapierrors.InvalidMachineConfiguration("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
+			instanceTenancy,
+			machinev1beta1.DefaultTenancy,
+			machinev1beta1.DedicatedTenancy,
+			machinev1beta1.HostTenancy)
+	}
+
+	if machineProviderConfig.Placement.Group.Name != "" {
+		pgKey := runtimeclient.ObjectKey{Namespace: machine.GetNamespace(), Name: machineProviderConfig.Placement.Group.Name}
+		pg := &machinev1.AWSPlacementGroup{}
+		if err := client.Get(context.TODO(), pgKey, pg); apierrors.IsNotFound(err) {
+			return nil, mapierrors.InvalidMachineConfiguration("AWSPlacementGroup %q not found. Please create an AWSPlacementGroup before setting placement.group.name", machineProviderConfig.Placement.Group.Name)
+		} else if err != nil {
+			return nil, fmt.Errorf("could not check for placement group: %v", err)
+		}
+		placement.SetGroupName(machineProviderConfig.Placement.Group.Name)
+
+		if machineProviderConfig.Placement.PartitionNumber != 0 {
+			if pg.Spec.ManagementSpec.Managed != nil && pg.Spec.ManagementSpec.Managed.GroupType != machinev1.AWSPartitionPlacementGroupType {
+				return nil, mapierrors.InvalidMachineConfiguration("placement.partitionNumber may only be set when used with a AWSPlacementGroup with groupType \"Partition\"")
+			}
+			placement.SetPartitionNumber(int64(machineProviderConfig.Placement.PartitionNumber))
+		}
+	}
+
+	if *placement == (ec2.Placement{}) {
+		// If the placement is empty, we should just return a nil so as not to pollute the RunInstancesInput
+		return nil, nil
+	}
+
+	return placement, nil
 }

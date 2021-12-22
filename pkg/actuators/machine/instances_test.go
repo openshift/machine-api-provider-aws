@@ -10,9 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestRemoveDuplicatedTags(t *testing.T) {
@@ -474,6 +477,7 @@ func TestLaunchInstance(t *testing.T) {
 		imageErr            error
 		instancesOutput     *ec2.Reservation
 		instancesErr        error
+		objects             []runtime.Object
 		succeeds            bool
 		runInstancesInput   *ec2.RunInstancesInput
 		infra               *configv1.Infrastructure
@@ -965,6 +969,114 @@ func TestLaunchInstance(t *testing.T) {
 				UserData: aws.String(""),
 			},
 		},
+		{
+			name:            "With a Placement Group Name which does not exist",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNameConfig(),
+			succeeds:        false,
+			infra:           infra,
+		},
+		{
+			name:            "With a Placement Group Name which does exist",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNameConfig(),
+			succeeds:        true,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSClusterPlacementGroupType),
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName: aws.String(stubPlacementGroupName),
+				},
+				UserData: aws.String(""),
+			},
+		},
+		{
+			name:            "With a Placement PartionNumber with a non Partition placement group",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNumberConfig(1),
+			succeeds:        false,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSClusterPlacementGroupType),
+			},
+		},
+		{
+			name:            "With a Placement PartionNumber with a Partition placement group",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNumberConfig(1),
+			succeeds:        true,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSPartitionPlacementGroupType),
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName:       aws.String(stubPlacementGroupName),
+					PartitionNumber: aws.Int64(1),
+				},
+				UserData: aws.String(""),
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -977,7 +1089,9 @@ func TestLaunchInstance(t *testing.T) {
 			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
 			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
 
-			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, tc.infra)
+			fakeClient := fake.NewFakeClient(tc.objects...)
+
+			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
 			t.Log(launchErr)
 			if launchErr == nil {
 				if !tc.succeeds {

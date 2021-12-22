@@ -88,7 +88,7 @@ func (r *Reconciler) create() error {
 		return err
 	}
 
-	instance, err := launchInstance(r.machine, r.providerSpec, userData, r.awsClient, infra)
+	instance, err := launchInstance(r.machine, r.providerSpec, userData, r.awsClient, r.client, infra)
 	if err != nil {
 		klog.Errorf("%s: error creating machine: %v", r.machine.Name, err)
 		conditionFailed := conditionFailed()

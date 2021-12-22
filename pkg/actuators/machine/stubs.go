@@ -23,11 +23,12 @@ const (
 	awsCredentialsSecretName = "aws-credentials-secret"
 	userDataSecretName       = "aws-actuator-user-data-secret"
 
-	keyName         = "aws-actuator-key-name"
-	stubClusterID   = "aws-actuator-cluster"
-	stubMachineName = "aws-actuator-testing-machine"
-	stubAMIID       = "ami-a9acbbd6"
-	stubInstanceID  = "i-02fcb933c5da7085c"
+	keyName                = "aws-actuator-key-name"
+	stubClusterID          = "aws-actuator-cluster"
+	stubMachineName        = "aws-actuator-testing-machine"
+	stubAMIID              = "ami-a9acbbd6"
+	stubInstanceID         = "i-02fcb933c5da7085c"
+	stubPlacementGroupName = "placement-group-1"
 )
 
 const userDataBlob = `#cloud-config
@@ -230,6 +231,12 @@ func stubDedicatedInstanceTenancy() *machinev1.AWSMachineProviderConfig {
 func stubInvalidInstanceTenancy() *machinev1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Placement.Tenancy = "invalid"
+	return pc
+}
+
+func stubPlacementGroupNameConfig() *machinev1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.Placement.GroupName = stubPlacementGroupName
 	return pc
 }
 

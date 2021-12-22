@@ -886,6 +886,48 @@ func TestLaunchInstance(t *testing.T) {
 				UserData: aws.String(""),
 			},
 		},
+		{
+			name:            "With an Placement Group Name",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNameConfig(),
+			succeeds:        true,
+			infra:           infra,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName: aws.String(stubPlacementGroupName),
+				},
+				UserData: aws.String(""),
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

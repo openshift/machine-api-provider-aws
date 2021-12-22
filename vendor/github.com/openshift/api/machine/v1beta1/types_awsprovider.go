@@ -177,6 +177,42 @@ type Placement struct {
 	// supported 3 options: default, dedicated and host.
 	// +optional
 	Tenancy InstanceTenancy `json:"tenancy,omitempty"`
+	// GroupName specifies the name of an AWS placement group to create the Machine within.
+	// If the group specified does not exist, it will be created based on the GroupType
+	// paramenter.
+	// When a Machine is deleted, if this leaves an empty Placement Group, the group is also
+	// deleted.
+	// +optional
+	GroupName string `json:"groupName,omitempty"`
+	// GroupType specifies the type of AWS placement group to use for this Machine.
+	// This parameter is only used when a Machine is being created and the named
+	// placement group does not exist.
+	// Valid values are "Cluster", "Partition", "Spread", and omitted, which means
+	// no opinion and the platform chooses a good default which may change over time.
+	// The current default value is "Spread".
+	// +kubebuilder:validation:Enum:="Cluster";"Partition";"Spread"
+	// +optional
+	GroupType AWSPlacementGroupType `json:"groupType,omitempty"`
+	// PartitionCount specifies the number of partitions for a Partition placement
+	// group. This value is only observed when creating a placement group and
+	// only when the `groupType` is set to `Partition`.
+	// Note the partition count of a placement group cannot be changed after creation.
+	// If unset, AWS will provide a default partition count.
+	// This default is currently 2.
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:validation:Maximum:=7
+	// +optional
+	PartitionCount int32 `json:"partitionCount,omitempty"`
+	// PartitionNumber specifies the numbered partition in which instances should be launched.
+	// This value is only used in conjunction with a `Partition` placement Group.
+	// It is recommended to only use this value if multiple MachineSets share
+	// a single Placement Group, in which case, each MachineSet should represent an individual partition number.
+	// If unset, when a Partition placement group is used, AWS will attempt to
+	// distribute instances evenly between partitions.
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:validation:Maximum:=7
+	// +optional
+	PartitionNumber int32 `json:"partitionNumber,omitempty"`
 }
 
 // Filter is a filter used to identify an AWS resource
@@ -233,6 +269,30 @@ const (
 const (
 	ClassicLoadBalancerType AWSLoadBalancerType = "classic" // AWS classic ELB
 	NetworkLoadBalancerType AWSLoadBalancerType = "network" // AWS Network Load Balancer (NLB)
+)
+
+// AWSPlacementGroupType represents the valid values for the Placement GroupType field.
+type AWSPlacementGroupType string
+
+const (
+	// AWSClusterPlacementGroupType is the "Cluster" placement group type.
+	// Cluster placement groups place instances close together to improve network latency and throughput.
+	AWSClusterPlacementGroupType AWSPlacementGroupType = "Cluster"
+	// AWSPartitionPlacementGroupType is the "Partition" placement group type.
+	// Partition placement groups reduce the likelihood of hardware failures
+	// disrupting your application's availability.
+	// Partition placement groups are recommended for use with large scale
+	// distributed and replicated workloads.
+	AWSPartitionPlacementGroupType AWSPlacementGroupType = "Partition"
+	// AWSSpreadPlacementGroupType is the "Spread" placement group type.
+	// Spread placement groups place instances on distinct racks within the availability
+	// zone. This ensures instances each have their own networking and power source
+	// for maximum hardware fault tolerance.
+	// Spread placement groups are recommended for a small number of critical instances
+	// which must be kept separate from one another.
+	// Using a Spread placement group imposes a limit of seven instances within
+	// the placement group within a single availability zone.
+	AWSSpreadPlacementGroupType AWSPlacementGroupType = "Spread"
 )
 
 // AWSMachineProviderStatus is the type that will be embedded in a Machine.Status.ProviderStatus field.

@@ -20,6 +20,8 @@ require (
 	sigs.k8s.io/controller-tools v0.7.0
 )
 
+replace github.com/openshift/api => github.com/JoelSpeed/api v0.0.0-20220204113201-6d46be2a3ee5
+
 require (
 	cloud.google.com/go v0.81.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect

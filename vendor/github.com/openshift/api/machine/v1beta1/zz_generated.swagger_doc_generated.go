@@ -68,6 +68,25 @@ func (AWSMachineProviderStatus) SwaggerDoc() map[string]string {
 	return map_AWSMachineProviderStatus
 }
 
+var map_AWSPartitionPlacement = map[string]string{
+	"":       "AWSPartitionPlacement defines the configuration for partition placement groups.",
+	"count":  "Count specifies the number of partitions for a Partition placement group. This value is only observed when creating a placement group and only when the `groupType` is set to `Partition`. Note the partition count of a placement group cannot be changed after creation. If unset, AWS will provide a default partition count. This default is currently 2. Note: If instanceTenancy is set to \"dedicated\", the maximum number of partitions is limited to 2.",
+	"number": "Number specifies the numbered partition in which instances should be launched. It is recommended to only use this value if multiple MachineSets share a single Placement Group, in which case, each MachineSet should represent an individual partition number. If unset, when a Partition placement group is used, AWS will attempt to distribute instances evenly between partitions.",
+}
+
+func (AWSPartitionPlacement) SwaggerDoc() map[string]string {
+	return map_AWSPartitionPlacement
+}
+
+var map_AWSPlacementGroupUnion = map[string]string{
+	"":          "AWSPlacementGroupUnion is a discriminated union of placement group configuration.",
+	"groupType": "GroupType specifies the type of AWS placement group to use for this Machine. This parameter is only used when a Machine is being created and the named placement group does not exist. Valid values are \"Cluster\", \"Partition\", \"Spread\". This value is required and, in case a placement group already exists, will be validated against the existing placement group. Note: If the value of this field is \"Spread\", instanceTenancy may not be set to \"dedicated\".",
+}
+
+func (AWSPlacementGroupUnion) SwaggerDoc() map[string]string {
+	return map_AWSPlacementGroupUnion
+}
+
 var map_AWSResourceReference = map[string]string{
 	"":        "AWSResourceReference is a reference to a specific AWS resource by ID, ARN, or filters. Only one of ID, ARN or Filters may be specified. Specifying more than one will result in a validation error.",
 	"id":      "ID of resource",
@@ -128,6 +147,7 @@ var map_Placement = map[string]string{
 	"region":           "Region is the region to use to create the instance",
 	"availabilityZone": "AvailabilityZone is the availability zone of the instance",
 	"tenancy":          "Tenancy indicates if instance should run on shared or single-tenant hardware. There are supported 3 options: default, dedicated and host.",
+	"groupName":        "GroupName specifies the name of an AWS placement group to create the Machine within. If the group specified does not exist, it will be created based on the GroupType parameter. When a Machine is deleted, if this leaves an empty Placement Group, the group is also deleted.",
 }
 
 func (Placement) SwaggerDoc() map[string]string {

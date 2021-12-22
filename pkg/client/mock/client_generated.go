@@ -36,6 +36,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// CreatePlacementGroup mocks base method.
+func (m *MockClient) CreatePlacementGroup(arg0 *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePlacementGroup", arg0)
+	ret0, _ := ret[0].(*ec2.CreatePlacementGroupOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePlacementGroup indicates an expected call of CreatePlacementGroup.
+func (mr *MockClientMockRecorder) CreatePlacementGroup(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePlacementGroup", reflect.TypeOf((*MockClient)(nil).CreatePlacementGroup), arg0)
+}
+
 // CreateTags mocks base method.
 func (m *MockClient) CreateTags(arg0 *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 	m.ctrl.T.Helper()
@@ -109,6 +124,21 @@ func (m *MockClient) DescribeInstances(arg0 *ec2.DescribeInstancesInput) (*ec2.D
 func (mr *MockClientMockRecorder) DescribeInstances(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstances", reflect.TypeOf((*MockClient)(nil).DescribeInstances), arg0)
+}
+
+// DescribePlacementGroups mocks base method.
+func (m *MockClient) DescribePlacementGroups(arg0 *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribePlacementGroups", arg0)
+	ret0, _ := ret[0].(*ec2.DescribePlacementGroupsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribePlacementGroups indicates an expected call of DescribePlacementGroups.
+func (mr *MockClientMockRecorder) DescribePlacementGroups(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribePlacementGroups", reflect.TypeOf((*MockClient)(nil).DescribePlacementGroups), arg0)
 }
 
 // DescribeSecurityGroups mocks base method.

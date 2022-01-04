@@ -282,6 +282,30 @@ func stubDescribeTargetHealthOutput() *elbv2.DescribeTargetHealthOutput {
 	return &elbv2.DescribeTargetHealthOutput{}
 }
 
+func stubDescribePlacementGroupsInput(groupName string) *ec2.DescribePlacementGroupsInput {
+	return &ec2.DescribePlacementGroupsInput{
+		GroupNames: []*string{aws.String(groupName)},
+	}
+}
+
+func stubDescribePlacementGroupsOutput(groupName string) *ec2.DescribePlacementGroupsOutput {
+	return &ec2.DescribePlacementGroupsOutput{
+		PlacementGroups: []*ec2.PlacementGroup{
+			{
+				GroupName: aws.String(groupName),
+			},
+		},
+	}
+}
+
+func stubCreatePlacementGroupOutput(groupName string) *ec2.CreatePlacementGroupOutput {
+	return &ec2.CreatePlacementGroupOutput{
+		PlacementGroup: &ec2.PlacementGroup{
+			GroupName: aws.String(groupName),
+		},
+	}
+}
+
 func stubReservation(imageID, instanceID string, privateIP string) *ec2.Reservation {
 	az := defaultAvailabilityZone
 	return &ec2.Reservation{

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -353,42 +352,13 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		}
 	}
 
-	var placement *ec2.Placement
-	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
+	if err := checkOrCreatePlacementGroup(client, machineProviderConfig.Placement, clusterID); err != nil {
+		return nil, err
 	}
 
-	instanceTenancy := machineProviderConfig.Placement.Tenancy
-	switch instanceTenancy {
-	case "":
-		// Do nothing when not set
-	case machinev1.DefaultTenancy, machinev1.DedicatedTenancy, machinev1.HostTenancy:
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetTenancy(string(instanceTenancy))
-	default:
-		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
-			instanceTenancy,
-			machinev1.DefaultTenancy,
-			machinev1.DedicatedTenancy,
-			machinev1.HostTenancy)
-	}
-
-	if machineProviderConfig.Placement.GroupName != "" {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetGroupName(machineProviderConfig.Placement.GroupName)
-	}
-	if machineProviderConfig.Placement.Partition != nil && machineProviderConfig.Placement.Partition.Number != 0 {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetPartitionNumber(int64(machineProviderConfig.Placement.Partition.Number))
+	placement, err := constructInstancePlacement(machineProviderConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	inputConfig := ec2.RunInstancesInput{
@@ -422,7 +392,7 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		// https://docs.aws.amazon.com/sdk-for-go/api/aws/awserr/
 		if _, ok := err.(awserr.Error); ok {
 			if reqErr, ok := err.(awserr.RequestFailure); ok {
-				if strings.HasPrefix(strconv.Itoa(reqErr.StatusCode()), "4") {
+				if reqErr.StatusCode() >= 400 && reqErr.StatusCode() < 500 {
 					klog.Infof("Error launching instance: %v", reqErr)
 					return nil, mapierrors.InvalidMachineConfiguration("error launching instance: %v", reqErr.Message())
 				}
@@ -536,4 +506,109 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1.AWSMachineProvide
 	instanceMarketOptionsRequest.SetSpotOptions(spotOptions)
 
 	return instanceMarketOptionsRequest
+}
+
+// constructInstancePlacement configures the placement options for the RunInstances request
+func constructInstancePlacement(machineProviderConfig *machinev1.AWSMachineProviderConfig) (*ec2.Placement, error) {
+	placement := &ec2.Placement{}
+	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
+		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
+	}
+
+	instanceTenancy := machineProviderConfig.Placement.Tenancy
+	switch instanceTenancy {
+	case "":
+		// Do nothing when not set
+	case machinev1.DefaultTenancy, machinev1.DedicatedTenancy, machinev1.HostTenancy:
+		placement.SetTenancy(string(instanceTenancy))
+	default:
+		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
+			instanceTenancy,
+			machinev1.DefaultTenancy,
+			machinev1.DedicatedTenancy,
+			machinev1.HostTenancy)
+	}
+
+	if machineProviderConfig.Placement.GroupName != "" {
+		placement.SetGroupName(machineProviderConfig.Placement.GroupName)
+	}
+	if machineProviderConfig.Placement.Partition != nil && machineProviderConfig.Placement.Partition.Number != 0 {
+		placement.SetPartitionNumber(int64(machineProviderConfig.Placement.Partition.Number))
+	}
+
+	if *placement == (ec2.Placement{}) {
+		// If the placement is empty, we should just return a nil so as not to pollute the RunInstancesInput
+		return nil, nil
+	}
+
+	return placement, nil
+}
+
+func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Placement, clusterID string) error {
+	if placement.GroupName == "" {
+		// Nothing to do if the group name is empty
+		return nil
+	}
+
+	placementGroups, err := client.DescribePlacementGroups(&ec2.DescribePlacementGroupsInput{
+		GroupNames: []*string{aws.String(placement.GroupName)},
+	})
+	if err != nil && !isAWS4xxError(err) {
+		// Ignore a 400 error as AWS will report an unknown placement group as a 400.
+		return fmt.Errorf("could not describe placement groups: %v", err)
+	}
+
+	if len(placementGroups.PlacementGroups) == 1 {
+		// This is the normal path, the named placement group exists
+		return nil
+	}
+	if len(placementGroups.PlacementGroups) > 1 {
+		return fmt.Errorf("expected 1 placement group for name %q, got %d", placement.GroupName, len(placementGroups.PlacementGroups))
+	}
+
+	// No placement group by that name existed, so we create one
+	createPlacementGroupInput := &ec2.CreatePlacementGroupInput{
+		GroupName: aws.String(placement.GroupName),
+		TagSpecifications: []*ec2.TagSpecification{
+			{
+				ResourceType: aws.String(ec2.ResourceTypePlacementGroup),
+				Tags: []*ec2.Tag{
+					{Key: aws.String("kubernetes.io/cluster/" + clusterID), Value: aws.String("owned")},
+					{Key: aws.String("Name"), Value: aws.String(placement.GroupName)},
+				},
+			},
+		},
+	}
+	switch placement.GroupType {
+	case machinev1.AWSSpreadPlacementGroupType, "":
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategySpread)
+	case machinev1.AWSClusterPlacementGroupType:
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategyCluster)
+	case machinev1.AWSPartitionPlacementGroupType:
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategyPartition)
+		if placement.Partition != nil && placement.Partition.Count != 0 {
+			createPlacementGroupInput.SetPartitionCount(int64(placement.Partition.Count))
+		}
+	default:
+		return fmt.Errorf("unknown placement strategy %q: valid values are %s, %s, %s and omitted", placement.GroupType, machinev1.AWSSpreadPlacementGroupType, machinev1.AWSClusterPlacementGroupType, machinev1.AWSPartitionPlacementGroupType)
+	}
+
+
+	if _, err := client.CreatePlacementGroup(createPlacementGroupInput); err != nil {
+		return fmt.Errorf("unable to create placement group: %v", err)
+	}
+
+	return nil
+}
+
+// isAWS4xxError will determine if the passed error is an AWS error with a 4xx status code.
+func isAWS4xxError(err error) bool {
+	if _, ok := err.(awserr.Error); ok {
+		if reqErr, ok := err.(awserr.RequestFailure); ok {
+			if reqErr.StatusCode() >= 400 && reqErr.StatusCode() < 500 {
+				return true
+			}
+		}
+	}
+	return false
 }

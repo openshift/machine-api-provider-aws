@@ -333,6 +333,10 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		}
 	}
 
+	if err := checkOrCreatePlacementGroup(client, machineProviderConfig.Placement, clusterID); err != nil {
+		return nil, err
+	}
+
 	var placement *ec2.Placement
 	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
 		if placement == nil {
@@ -516,4 +520,59 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1.AWSMachineProvide
 	instanceMarketOptionsRequest.SetSpotOptions(spotOptions)
 
 	return instanceMarketOptionsRequest
+}
+
+func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Placement, clusterID string) error {
+	if placement.GroupName == "" {
+		// Nothing to do if the group name is empty
+		return nil
+	}
+
+	placementGroups, err := client.DescribePlacementGroups(&ec2.DescribePlacementGroupsInput{
+		GroupNames: []*string{aws.String(placement.GroupName)},
+	})
+	if err != nil {
+		return fmt.Errorf("could not describe placement groups: %v", err)
+	}
+
+	if len(placementGroups.PlacementGroups) == 1 {
+		// This is the normal path, the named placement group exists
+		return nil
+	}
+	if len(placementGroups.PlacementGroups) > 1 {
+		return fmt.Errorf("expected 1 placement group for name %q, got %d", placement.GroupName, len(placementGroups.PlacementGroups))
+	}
+
+	// No placement group by that name existed, so we create one
+	createPlacementGroupInput := &ec2.CreatePlacementGroupInput{
+		GroupName: aws.String(placement.GroupName),
+		TagSpecifications: []*ec2.TagSpecification{
+			{
+				ResourceType: aws.String(ec2.ResourceTypePlacementGroup),
+				Tags: []*ec2.Tag{
+					{Key: aws.String("kubernetes.io/cluster/" + clusterID), Value: aws.String("owned")},
+					{Key: aws.String("Name"), Value: aws.String(placement.GroupName)},
+				},
+			},
+		},
+	}
+	switch placement.GroupType {
+	case machinev1.AWSSpreadPlacementGroupType, "":
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategySpread)
+	case machinev1.AWSClusterPlacementGroupType:
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategyCluster)
+	case machinev1.AWSPartitionPlacementGroupType:
+		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategyPartition)
+	default:
+		return fmt.Errorf("unknown placement strategy %q: valid values are %s, %s, %s and omitted", placement.GroupType, machinev1.AWSSpreadPlacementGroupType, machinev1.AWSClusterPlacementGroupType, machinev1.AWSPartitionPlacementGroupType)
+	}
+	if placement.PartitionCount != 0 {
+		createPlacementGroupInput.SetPartitionCount(int64(placement.PartitionCount))
+	}
+
+	if _, err := client.CreatePlacementGroup(createPlacementGroupInput); err != nil {
+		return fmt.Errorf("unable to create placement group: %v", err)
+	}
+
+	return nil
 }

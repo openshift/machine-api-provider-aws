@@ -463,20 +463,22 @@ func TestLaunchInstance(t *testing.T) {
 	stubTagListWithInfraObject := buildTagList(machine.Name, stubClusterID, providerConfig.Tags, infra)
 
 	cases := []struct {
-		name                string
-		providerConfig      *machinev1.AWSMachineProviderConfig
-		securityGroupOutput *ec2.DescribeSecurityGroupsOutput
-		securityGroupErr    error
-		subnetOutput        *ec2.DescribeSubnetsOutput
-		subnetErr           error
-		azErr               error
-		imageOutput         *ec2.DescribeImagesOutput
-		imageErr            error
-		instancesOutput     *ec2.Reservation
-		instancesErr        error
-		succeeds            bool
-		runInstancesInput   *ec2.RunInstancesInput
-		infra               *configv1.Infrastructure
+		name                  string
+		providerConfig        *machinev1.AWSMachineProviderConfig
+		securityGroupOutput   *ec2.DescribeSecurityGroupsOutput
+		securityGroupErr      error
+		subnetOutput          *ec2.DescribeSubnetsOutput
+		subnetErr             error
+		azErr                 error
+		imageOutput           *ec2.DescribeImagesOutput
+		imageErr              error
+		instancesOutput       *ec2.Reservation
+		instancesErr          error
+		placementGroupsOutput *ec2.DescribePlacementGroupsOutput
+		placementGroupsErr    error
+		succeeds              bool
+		runInstancesInput     *ec2.RunInstancesInput
+		infra                 *configv1.Infrastructure
 	}{
 		{
 			name: "Security groups with filters",
@@ -887,11 +889,55 @@ func TestLaunchInstance(t *testing.T) {
 			},
 		},
 		{
-			name:            "With an Placement Group Name",
-			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
-			providerConfig:  stubPlacementGroupNameConfig(),
-			succeeds:        true,
-			infra:           infra,
+			name:                  "With a Placement Group Name which already exists",
+			instancesOutput:       stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:        stubPlacementGroupNameConfig(),
+			placementGroupsOutput: stubDescribePlacementGroupsOutput(stubPlacementGroupName),
+			succeeds:              true,
+			infra:                 infra,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName: aws.String(stubPlacementGroupName),
+				},
+				UserData: aws.String(""),
+			},
+		},
+		{
+			name:                  "With a Placement Group Name which does not exist",
+			instancesOutput:       stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:        stubPlacementGroupNameConfig(),
+			placementGroupsOutput: &ec2.DescribePlacementGroupsOutput{},
+			succeeds:              true,
+			infra:                 infra,
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -939,6 +985,8 @@ func TestLaunchInstance(t *testing.T) {
 			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(tc.subnetOutput, tc.subnetErr).AnyTimes()
 			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
 			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
+			mockAWSClient.EXPECT().DescribePlacementGroups(stubDescribePlacementGroupsInput(stubPlacementGroupName)).Return(tc.placementGroupsOutput, tc.placementGroupsErr).AnyTimes()
+			mockAWSClient.EXPECT().CreatePlacementGroup(gomock.Any()).Return(stubCreatePlacementGroupOutput(stubPlacementGroupName), nil).AnyTimes()
 
 			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, tc.infra)
 			t.Log(launchErr)

@@ -531,7 +531,8 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 	placementGroups, err := client.DescribePlacementGroups(&ec2.DescribePlacementGroupsInput{
 		GroupNames: []*string{aws.String(placement.GroupName)},
 	})
-	if err != nil {
+	if err != nil && !isAWS4xxError(err) {
+		// Ignore a 400 error as AWS will report an unknown placement group as a 400.
 		return fmt.Errorf("could not describe placement groups: %v", err)
 	}
 
@@ -575,4 +576,16 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 	}
 
 	return nil
+}
+
+// isAWS4xxError will determine if the passed error is an AWS error with a 4xx status code.
+func isAWS4xxError(err error) bool {
+	if _, ok := err.(awserr.Error); ok {
+		if reqErr, ok := err.(awserr.RequestFailure); ok {
+			if strings.HasPrefix(strconv.Itoa(reqErr.StatusCode()), "4") {
+				return true
+			}
+		}
+	}
+	return false
 }

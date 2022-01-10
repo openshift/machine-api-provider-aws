@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -373,7 +372,7 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		// https://docs.aws.amazon.com/sdk-for-go/api/aws/awserr/
 		if _, ok := err.(awserr.Error); ok {
 			if reqErr, ok := err.(awserr.RequestFailure); ok {
-				if strings.HasPrefix(strconv.Itoa(reqErr.StatusCode()), "4") {
+				if reqErr.StatusCode() >= 400 && reqErr.StatusCode() < 500 {
 					klog.Infof("Error launching instance: %v", reqErr)
 					return nil, mapierrors.InvalidMachineConfiguration("error launching instance: %v", reqErr.Message())
 				}
@@ -585,7 +584,7 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 func isAWS4xxError(err error) bool {
 	if _, ok := err.(awserr.Error); ok {
 		if reqErr, ok := err.(awserr.RequestFailure); ok {
-			if strings.HasPrefix(strconv.Itoa(reqErr.StatusCode()), "4") {
+			if reqErr.StatusCode() >= 400 && reqErr.StatusCode() < 500 {
 				return true
 			}
 		}

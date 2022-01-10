@@ -337,42 +337,9 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		return nil, err
 	}
 
-	var placement *ec2.Placement
-	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
-	}
-
-	instanceTenancy := machineProviderConfig.Placement.Tenancy
-	switch instanceTenancy {
-	case "":
-		// Do nothing when not set
-	case machinev1.DefaultTenancy, machinev1.DedicatedTenancy, machinev1.HostTenancy:
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetTenancy(string(instanceTenancy))
-	default:
-		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
-			instanceTenancy,
-			machinev1.DefaultTenancy,
-			machinev1.DedicatedTenancy,
-			machinev1.HostTenancy)
-	}
-
-	if machineProviderConfig.Placement.GroupName != "" {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetGroupName(machineProviderConfig.Placement.GroupName)
-	}
-	if machineProviderConfig.Placement.PartitionNumber != 0 {
-		if placement == nil {
-			placement = &ec2.Placement{}
-		}
-		placement.SetPartitionNumber(int64(machineProviderConfig.Placement.PartitionNumber))
+	placement, err := constructInstancePlacement(machineProviderConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	inputConfig := ec2.RunInstancesInput{
@@ -520,6 +487,42 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1.AWSMachineProvide
 	instanceMarketOptionsRequest.SetSpotOptions(spotOptions)
 
 	return instanceMarketOptionsRequest
+}
+
+// constructInstancePlacement configures the placement options for the RunInstances request
+func constructInstancePlacement(machineProviderConfig *machinev1.AWSMachineProviderConfig) (*ec2.Placement, error) {
+	placement := &ec2.Placement{}
+	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
+		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
+	}
+
+	instanceTenancy := machineProviderConfig.Placement.Tenancy
+	switch instanceTenancy {
+	case "":
+		// Do nothing when not set
+	case machinev1.DefaultTenancy, machinev1.DedicatedTenancy, machinev1.HostTenancy:
+		placement.SetTenancy(string(instanceTenancy))
+	default:
+		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
+			instanceTenancy,
+			machinev1.DefaultTenancy,
+			machinev1.DedicatedTenancy,
+			machinev1.HostTenancy)
+	}
+
+	if machineProviderConfig.Placement.GroupName != "" {
+		placement.SetGroupName(machineProviderConfig.Placement.GroupName)
+	}
+	if machineProviderConfig.Placement.PartitionNumber != 0 {
+		placement.SetPartitionNumber(int64(machineProviderConfig.Placement.PartitionNumber))
+	}
+
+	if *placement == (ec2.Placement{}) {
+		// If the placement is empty, we should just return a nil so as not to pollute the RunInstancesInput
+		return nil, nil
+	}
+
+	return placement, nil
 }
 
 func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Placement, clusterID string) error {

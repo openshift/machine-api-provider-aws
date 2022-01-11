@@ -159,6 +159,15 @@ func (r *Reconciler) delete() error {
 		return fmt.Errorf("failed to updated update load balancers: %w", err)
 	}
 
+	if err = r.deletePlacementGroup(); err != nil {
+		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+			Name:      r.machine.Name,
+			Namespace: r.machine.Namespace,
+			Reason:    err.Error(),
+		})
+		return fmt.Errorf("failed to delete placement group: %w", err)
+	}
+
 	if len(terminatingInstances) == 1 {
 		if terminatingInstances[0] != nil && terminatingInstances[0].CurrentState != nil && terminatingInstances[0].CurrentState.Name != nil {
 			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(terminatingInstances[0].CurrentState.Name)
@@ -339,6 +348,101 @@ func (r *Reconciler) updateLoadBalancers(instance *ec2.Instance) error {
 	if len(errs) > 0 {
 		return errorutil.NewAggregate(errs)
 	}
+	return nil
+}
+
+// deletePlacementGroup deletes the placement group for the machine
+func (r *Reconciler) deletePlacementGroup() error {
+	placementGroupName := r.providerSpec.Placement.GroupName
+	if placementGroupName == "" {
+		// Nothing to do if the group name is empty
+		return nil
+	}
+
+	// Check that there are no other machines that require this placement group
+	machineList := &machinev1.MachineList{}
+	if err := r.client.List(r.Context, machineList, client.InNamespace(r.machine.Namespace)); err != nil {
+		return fmt.Errorf("could not get a list of available machines: %v", err)
+	}
+
+	var machineCount int
+	for _, machine := range machineList.Items {
+		providerSpec, err := ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
+		if err != nil {
+			return fmt.Errorf("couldn't decode machine spec: %v", err)
+		}
+		if providerSpec.Placement.GroupName == placementGroupName {
+			machineCount++
+		}
+	}
+	if machineCount > 1 {
+		klog.Infof("placement group for name %q is still required by %d machines and cannot be removed", placementGroupName, machineCount)
+		return nil
+	}
+
+	// Check that the placement group exists
+	placementGroups, err := r.awsClient.DescribePlacementGroups(&ec2.DescribePlacementGroupsInput{
+		GroupNames: []*string{aws.String(placementGroupName)},
+	})
+	if err != nil && !isAWS4xxError(err) {
+		// Ignore a 400 error as AWS will report an unknown placement group as a 400.
+		return fmt.Errorf("could not describe placement groups: %v", err)
+	}
+
+	if len(placementGroups.PlacementGroups) == 0 {
+		// This is the normal path, the named placement group doesn't exist
+		return nil
+	}
+	if len(placementGroups.PlacementGroups) > 1 {
+		return fmt.Errorf("expected 1 placement group for name %q, got %d", placementGroupName, len(placementGroups.PlacementGroups))
+	}
+
+	// Check that the placement group has a cluster tag
+	placementGroup := placementGroups.PlacementGroups[0]
+	clusterID, _ := getClusterID(r.machine)
+	found := false
+	for _, tag := range placementGroup.Tags {
+		if tag.Key == aws.String("kubernetes.io/cluster/"+clusterID) && tag.Value == aws.String("owned") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		klog.Infof("placement group %q wasn't created by MAPI and cannot be removed", placementGroupName)
+		return nil
+	}
+
+	// Check that the placement group contains no instances
+	result, err := r.awsClient.DescribeInstances(&ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("placement-group-name"),
+				Values: []*string{aws.String(placementGroupName)},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("could not get the number of instances in the placement group %s: %v", placementGroupName, err)
+	}
+
+	var instanceCount int
+	for _, reservation := range result.Reservations {
+		instanceCount += len(reservation.Instances)
+	}
+	if instanceCount > 0 {
+		klog.Info("placement group for name %q still constains %d instances and cannot be removed", placementGroupName, instanceCount)
+		return nil
+	}
+
+	// Only one placement group with the given name exists and it is empty, so we remove it
+	deletePlacementGroupInput := &ec2.DeletePlacementGroupInput{
+		GroupName: aws.String(placementGroupName),
+	}
+
+	if _, err := r.awsClient.DeletePlacementGroup(deletePlacementGroupInput); err != nil {
+		return fmt.Errorf("unable to delete placement group: %v", err)
+	}
+
 	return nil
 }
 

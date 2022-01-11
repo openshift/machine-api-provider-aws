@@ -113,6 +113,10 @@ func (c *awsClient) CreatePlacementGroup(input *ec2.CreatePlacementGroupInput) (
 	return &ec2.CreatePlacementGroupOutput{}, nil
 }
 
+func (c *awsClient) DeletePlacementGroup(input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
+	return &ec2.DeletePlacementGroupOutput{}, nil
+}
+
 func (c *awsClient) RegisterInstancesWithLoadBalancer(input *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
 	// Feel free to extend the returned values
 	return &elb.RegisterInstancesWithLoadBalancerOutput{}, nil

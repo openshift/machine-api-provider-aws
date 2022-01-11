@@ -66,6 +66,21 @@ func (mr *MockClientMockRecorder) CreateTags(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTags", reflect.TypeOf((*MockClient)(nil).CreateTags), arg0)
 }
 
+// DeletePlacementGroup mocks base method.
+func (m *MockClient) DeletePlacementGroup(arg0 *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeletePlacementGroup", arg0)
+	ret0, _ := ret[0].(*ec2.DeletePlacementGroupOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeletePlacementGroup indicates an expected call of DeletePlacementGroup.
+func (mr *MockClientMockRecorder) DeletePlacementGroup(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePlacementGroup", reflect.TypeOf((*MockClient)(nil).DeletePlacementGroup), arg0)
+}
+
 // DescribeAvailabilityZones mocks base method.
 func (m *MockClient) DescribeAvailabilityZones(arg0 *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 	m.ctrl.T.Helper()

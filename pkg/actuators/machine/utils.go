@@ -486,11 +486,11 @@ func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machin
 	return providerStatus, nil
 }
 
-func fetchInfraResourceTags(infra *configv1.Infrastructure) (bool, []configv1.AWSResourceTag) {
+func fetchInfraResourceTags(infra *configv1.Infrastructure) ([]configv1.AWSResourceTag, bool) {
 	// TODO : https://github.com/openshift/api/pull/1064 , we should consider the spec over status if spec contains the user tags
 	if infra != nil && infra.Status.PlatformStatus != nil &&
 		infra.Status.PlatformStatus.AWS != nil && infra.Status.PlatformStatus.AWS.ResourceTags != nil {
-		return true, infra.Status.PlatformStatus.AWS.ResourceTags
+		return infra.Status.PlatformStatus.AWS.ResourceTags, true
 	}
-	return false, nil
+	return nil, false
 }

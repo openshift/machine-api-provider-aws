@@ -211,8 +211,8 @@ func (r *Reconciler) update() error {
 	runningLen := len(runningInstances)
 	var newestInstance *ec2.Instance
 
-	//Prepare the tag list with infrastructure tags.
-	//these tags will update to the ec2 instance.
+	// Prepare the tag list with infrastructure tags.
+	// These tags will be used to update the EC2 instance tags.
 	tagList, err := r.getTagsFromInfrastructure()
 	if err != nil {
 		return err
@@ -263,10 +263,10 @@ func (r *Reconciler) getTagsFromInfrastructure() (map[string]string, error) {
 	infraName := client.ObjectKey{Name: awsclient.GlobalInfrastuctureName}
 
 	if err := r.client.Get(r.Context, infraName, infra); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error fetching Infrastructure %q: %v", infraName.Name, err)
 	}
 	tags := make(map[string]string)
-	ok, resourceTags := fetchInfraResourceTags(infra)
+	resourceTags, ok := fetchInfraResourceTags(infra)
 	if !ok {
 		return tags, nil
 	}

@@ -211,6 +211,13 @@ func (r *Reconciler) update() error {
 	runningLen := len(runningInstances)
 	var newestInstance *ec2.Instance
 
+	// Prepare the tag list with infrastructure tags.
+	// These tags will be used to update the EC2 instance tags.
+	tagList, err := r.getTagsFromInfrastructure()
+	if err != nil {
+		return err
+	}
+
 	if runningLen > 0 {
 		// It would be very unusual to have more than one here, but it is
 		// possible if someone manually provisions a machine with same tag name.
@@ -240,7 +247,7 @@ func (r *Reconciler) update() error {
 		return fmt.Errorf("failed to set machine cloud provider specifics: %w", err)
 	}
 
-	if err = correctExistingTags(r.machine, newestInstance, r.awsClient); err != nil {
+	if err = correctExistingTags(r.machine, newestInstance, r.awsClient, tagList); err != nil {
 		return fmt.Errorf("failed to correct existing instance tags: %w", err)
 	}
 
@@ -249,6 +256,25 @@ func (r *Reconciler) update() error {
 	r.machineScope.setProviderStatus(newestInstance, conditionSuccess())
 
 	return r.requeueIfInstancePending(newestInstance)
+}
+
+func (r *Reconciler) getTagsFromInfrastructure() (map[string]string, error) {
+	infra := &configv1.Infrastructure{}
+	infraName := client.ObjectKey{Name: awsclient.GlobalInfrastuctureName}
+
+	if err := r.client.Get(r.Context, infraName, infra); err != nil {
+		return nil, fmt.Errorf("error fetching Infrastructure %q: %v", infraName.Name, err)
+	}
+	tags := make(map[string]string)
+	resourceTags, ok := fetchInfraResourceTags(infra)
+	if !ok {
+		return tags, nil
+	}
+
+	for _, value := range resourceTags {
+		tags[value.Key] = value.Value
+	}
+	return tags, nil
 }
 
 // exists returns true if machine exists.

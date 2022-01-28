@@ -22,6 +22,8 @@ import (
 	"net"
 	"strings"
 
+	configv1 "github.com/openshift/api/config/v1"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
@@ -134,7 +136,7 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client) error {
+func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]string) error {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
 	if instance == nil || instance.InstanceId == nil {
 		return fmt.Errorf("unexpected nil found in instance: %v", instance)
@@ -153,28 +155,41 @@ func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, cli
 			if *tag.Key == "kubernetes.io/cluster/"+clusterID && *tag.Value == "owned" {
 				clusterTagOk = true
 			}
+			if tagValue, present := tags[*tag.Key]; present && *tag.Value == tagValue {
+				delete(tags, *tag.Key)
+			}
 		}
 	}
 
-	// Update our tags if they're not set or correct
+	tagsToAdd := []*ec2.Tag{}
+	for key, value := range tags {
+		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+			Key:   aws.String(key),
+			Value: aws.String(value),
+		})
+	}
+
 	if !nameTagOk || !clusterTagOk {
+		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+			Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+			Value: aws.String("owned"),
+		})
+		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+			Key:   aws.String("Name"),
+			Value: aws.String(machine.Name),
+		})
+	}
+
+	if len(tagsToAdd) != 0 {
 		// Create tags only adds/replaces what is present, does not affect other tags.
 		input := &ec2.CreateTagsInput{
 			Resources: []*string{
 				aws.String(*instance.InstanceId),
 			},
-			Tags: []*ec2.Tag{
-				{
-					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
-					Value: aws.String("owned"),
-				},
-				{
-					Key:   aws.String("Name"),
-					Value: aws.String(machine.Name),
-				},
-			},
+			Tags: tagsToAdd,
 		}
-		klog.Infof("Invalid or missing instance tags for machine: %v; instanceID: %v, updating", machine.Name, *instance.InstanceId)
+		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
+			machine.Name, *instance.InstanceId, tagsToAdd)
 		_, err := client.CreateTags(input)
 		return err
 	}
@@ -469,4 +484,13 @@ func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machin
 
 	klog.V(5).Infof("Got provider Status from raw extension: %+v", providerStatus)
 	return providerStatus, nil
+}
+
+func fetchInfraResourceTags(infra *configv1.Infrastructure) ([]configv1.AWSResourceTag, bool) {
+	// TODO : https://github.com/openshift/api/pull/1064 , we should consider the spec over status if spec contains the user tags
+	if infra != nil && infra.Status.PlatformStatus != nil &&
+		infra.Status.PlatformStatus.AWS != nil && infra.Status.PlatformStatus.AWS.ResourceTags != nil {
+		return infra.Status.PlatformStatus.AWS.ResourceTags, true
+	}
+	return nil, false
 }

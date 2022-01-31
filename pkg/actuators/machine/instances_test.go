@@ -1459,3 +1459,94 @@ func TestValidatePlacementGroupConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPlacementGroupTags(t *testing.T) {
+	cases := []struct {
+		name      string
+		groupName string
+		clusterID string
+		infra     *configv1.Infrastructure
+		expected  []*ec2.Tag
+	}{
+		{
+			name:      "with empty infra should return default tags",
+			clusterID: "my-cluster-01",
+			groupName: "my-placement-group",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							ResourceTags: []configv1.AWSResourceTag{},
+						},
+					},
+				},
+			},
+			expected: []*ec2.Tag{
+				{Key: aws.String("kubernetes.io/cluster/my-cluster-01"), Value: aws.String("owned")},
+				{Key: aws.String("Name"), Value: aws.String("my-placement-group")},
+			},
+		},
+		{
+			name:      "with empty infra should return default tags",
+			clusterID: "my-cluster-01",
+			groupName: "my-placement-group",
+			infra:     &configv1.Infrastructure{}, // should work with empty infra object
+			expected: []*ec2.Tag{
+				{Key: aws.String("kubernetes.io/cluster/my-cluster-01"), Value: aws.String("owned")},
+				{Key: aws.String("Name"), Value: aws.String("my-placement-group")},
+			},
+		},
+		{
+			name:      "with nil infra should  return default tags",
+			clusterID: "my-cluster-01",
+			groupName: "my-placement-group",
+			infra:     nil, // should work with nil infra object
+			expected: []*ec2.Tag{
+				{Key: aws.String("kubernetes.io/cluster/my-cluster-01"), Value: aws.String("owned")},
+				{Key: aws.String("Name"), Value: aws.String("my-placement-group")},
+			},
+		},
+
+		{
+			name:      "should filter out bad tags from infra object",
+			clusterID: "my-cluster-01",
+			groupName: "my-placement-group",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							ResourceTags: []configv1.AWSResourceTag{
+								{
+									Key:   "kubernetes.io/cluster/badid",
+									Value: "badvalue",
+								},
+								{
+									Key:   "Name",
+									Value: "badname",
+								},
+								{
+									Key:   "good",
+									Value: "goodvalue",
+								},
+							},
+						},
+					},
+				},
+			},
+			// Invalid tags get dropped and the valid clusterID and Name get applied last.
+			expected: []*ec2.Tag{
+				{Key: aws.String("kubernetes.io/cluster/my-cluster-01"), Value: aws.String("owned")},
+				{Key: aws.String("Name"), Value: aws.String("my-placement-group")},
+				{Key: aws.String("good"), Value: aws.String("goodvalue")},
+			},
+		},
+	}
+	for i, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			actual := buildPlacementGroupTags(c.groupName, c.clusterID, c.infra)
+			if !reflect.DeepEqual(c.expected, actual) {
+				t.Errorf("test #%d: expected %+v, got %+v", i, c.expected, actual)
+			}
+		})
+	}
+}

@@ -352,7 +352,7 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 		}
 	}
 
-	if err := checkOrCreatePlacementGroup(client, machineProviderConfig.Placement, clusterID); err != nil {
+	if err := checkOrCreatePlacementGroup(client, machineProviderConfig.Placement, clusterID, infra); err != nil {
 		return nil, err
 	}
 
@@ -544,7 +544,7 @@ func constructInstancePlacement(machineProviderConfig *machinev1.AWSMachineProvi
 	return placement, nil
 }
 
-func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Placement, clusterID string) error {
+func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Placement, clusterID string, infra *configv1.Infrastructure) error {
 	if placement.GroupName == "" {
 		// Nothing to do if the group name is empty
 		return nil
@@ -565,16 +565,15 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 		return fmt.Errorf("expected 1 placement group for name %q, got %d", placement.GroupName, len(placementGroups.PlacementGroups))
 	}
 
+	tags := buildPlacementGroupTags(placement.GroupName, clusterID, infra)
+
 	// No placement group by that name existed, so we create one
 	createPlacementGroupInput := &ec2.CreatePlacementGroupInput{
 		GroupName: aws.String(placement.GroupName),
 		TagSpecifications: []*ec2.TagSpecification{
 			{
 				ResourceType: aws.String(ec2.ResourceTypePlacementGroup),
-				Tags: []*ec2.Tag{
-					{Key: aws.String("kubernetes.io/cluster/" + clusterID), Value: aws.String("owned")},
-					{Key: aws.String("Name"), Value: aws.String(placement.GroupName)},
-				},
+				Tags:         tags,
 			},
 		},
 	}
@@ -633,6 +632,27 @@ func validatePlacementGroupConfig(placement machinev1.Placement, placementGroup 
 		}
 	}
 	return nil
+}
+
+func buildPlacementGroupTags(groupName, clusterID string, infra *configv1.Infrastructure) []*ec2.Tag {
+	rawTagList := []*ec2.Tag{}
+	rawTagList = append(rawTagList, []*ec2.Tag{
+		{Key: aws.String("kubernetes.io/cluster/" + clusterID), Value: aws.String("owned")},
+		{Key: aws.String("Name"), Value: aws.String(groupName)},
+	}...)
+
+	if infra == nil || infra.Status.PlatformStatus == nil || infra.Status.PlatformStatus.AWS == nil || infra.Status.PlatformStatus.AWS.ResourceTags == nil {
+		return rawTagList
+	}
+
+	for _, tag := range infra.Status.PlatformStatus.AWS.ResourceTags {
+		// AWS tags are case sensitive, so we don't need to worry about other casing of "Name"
+		if !strings.HasPrefix(tag.Key, "kubernetes.io/cluster/") && tag.Key != "Name" {
+			rawTagList = append(rawTagList, &ec2.Tag{Key: aws.String(tag.Key), Value: aws.String(tag.Value)})
+		}
+	}
+
+	return removeDuplicatedTags(rawTagList)
 }
 
 // isAWS4xxError will determine if the passed error is an AWS error with a 4xx status code.

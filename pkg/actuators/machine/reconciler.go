@@ -265,16 +265,7 @@ func (r *Reconciler) getTagsFromInfrastructure() (map[string]string, error) {
 	if err := r.client.Get(r.Context, infraName, infra); err != nil {
 		return nil, fmt.Errorf("error fetching Infrastructure %q: %v", infraName.Name, err)
 	}
-	tags := make(map[string]string)
-	resourceTags, ok := fetchInfraResourceTags(infra)
-	if !ok {
-		return tags, nil
-	}
-
-	for _, value := range resourceTags {
-		tags[value.Key] = value.Value
-	}
-	return tags, nil
+	return fetchInfraResourceTags(infra), nil
 }
 
 // exists returns true if machine exists.

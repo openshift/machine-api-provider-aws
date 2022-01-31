@@ -486,11 +486,22 @@ func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machin
 	return providerStatus, nil
 }
 
-func fetchInfraResourceTags(infra *configv1.Infrastructure) ([]configv1.AWSResourceTag, bool) {
-	// TODO : https://github.com/openshift/api/pull/1064 , we should consider the spec over status if spec contains the user tags
+func fetchInfraResourceTags(infra *configv1.Infrastructure) map[string]string {
+	// Should consider the spec over status if spec contains the user tags
+
+	mergedTags := make(map[string]string)
 	if infra != nil && infra.Status.PlatformStatus != nil &&
-		infra.Status.PlatformStatus.AWS != nil && infra.Status.PlatformStatus.AWS.ResourceTags != nil {
-		return infra.Status.PlatformStatus.AWS.ResourceTags, true
+		infra.Status.PlatformStatus.AWS != nil {
+		for _, value := range infra.Status.PlatformStatus.AWS.ResourceTags {
+			mergedTags[value.Key] = value.Value
+		}
 	}
-	return nil, false
+
+	if infra != nil && infra.Spec.PlatformSpec.AWS != nil {
+		for _, value := range infra.Spec.PlatformSpec.AWS.ResourceTags {
+			mergedTags[value.Key] = value.Value
+		}
+	}
+
+	return mergedTags
 }

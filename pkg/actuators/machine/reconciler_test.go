@@ -900,3 +900,208 @@ func TestGetMachineInstances(t *testing.T) {
 		})
 	}
 }
+
+func TestDeletePlacementGroup(t *testing.T) {
+	instanceID := "i-02fa4197109214b46"
+	imageID := "ami-a9acbbd6"
+	pgName := "mapi-placement-group"
+
+	machine, err := stubMachine()
+	if err != nil {
+		t.Fatalf("unable to build stub machine: %v", err)
+	}
+
+	machinePc, err := ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	machinePc.Placement.GroupName = pgName
+
+	config, err := RawExtensionFromProviderSpec(machinePc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	machine.Spec.ProviderSpec = machinev1.ProviderSpec{Value: config}
+
+	awsCredentialsSecret := stubAwsCredentialsSecret()
+	userDataSecret := stubUserDataSecret()
+
+	request := &ec2.DescribePlacementGroupsInput{
+		GroupNames: []*string{aws.String(pgName)},
+	}
+
+	testCases := []struct {
+		testcase       string
+		providerStatus machinev1.AWSMachineProviderStatus
+		awsClientFunc  func(*gomock.Controller) awsclient.Client
+		expectError    bool
+	}{
+		{
+			testcase: "Successful deletion",
+			providerStatus: machinev1.AWSMachineProviderStatus{
+				InstanceID: aws.String(instanceID),
+			},
+			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
+				mockAWSClient := mockaws.NewMockClient(ctrl)
+
+				mockAWSClient.EXPECT().DescribePlacementGroups(request).Return(
+					stubDescribePlacementGroupsOutput(pgName),
+					nil,
+				).Times(1)
+
+				mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
+					Filters: []*ec2.Filter{
+						{
+							Name:   aws.String("placement-group-name"),
+							Values: []*string{aws.String(pgName)},
+						},
+					},
+				}).Return(
+					&ec2.DescribeInstancesOutput{
+						Reservations: []*ec2.Reservation{
+							{
+								Instances: []*ec2.Instance{},
+							},
+						},
+					},
+					nil,
+				).Times(1)
+
+				mockAWSClient.EXPECT().DeletePlacementGroup(&ec2.DeletePlacementGroupInput{
+					GroupName: &pgName,
+				}).Return(&ec2.DeletePlacementGroupOutput{}, nil).Times(1)
+
+				return mockAWSClient
+			},
+		},
+		{
+			testcase: "Not deleted because placement group still contains an instance",
+			providerStatus: machinev1.AWSMachineProviderStatus{
+				InstanceID: aws.String(instanceID),
+			},
+			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
+				mockAWSClient := mockaws.NewMockClient(ctrl)
+
+				mockAWSClient.EXPECT().DescribePlacementGroups(request).Return(
+					stubDescribePlacementGroupsOutput(pgName),
+					nil,
+				).Times(1)
+
+				mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
+					Filters: []*ec2.Filter{
+						{
+							Name:   aws.String("placement-group-name"),
+							Values: []*string{aws.String(pgName)},
+						},
+					},
+				}).Return(
+					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameTerminated, "192.168.0.10"),
+					nil,
+				).Times(1)
+
+				return mockAWSClient
+			},
+		},
+		{
+			testcase: "Not deleted because placement group doesn't have the cluster tag",
+			providerStatus: machinev1.AWSMachineProviderStatus{
+				InstanceID: aws.String(instanceID),
+			},
+			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
+				mockAWSClient := mockaws.NewMockClient(ctrl)
+
+				pg := stubDescribePlacementGroupsOutput(pgName)
+				pg.PlacementGroups[0].Tags = []*ec2.Tag{}
+
+				mockAWSClient.EXPECT().DescribePlacementGroups(request).Return(
+					pg,
+					nil,
+				).Times(1)
+
+				return mockAWSClient
+			},
+		},
+		{
+			testcase: "Not deleted because there are no such placement groups",
+			providerStatus: machinev1.AWSMachineProviderStatus{
+				InstanceID: aws.String(instanceID),
+			},
+			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
+				mockAWSClient := mockaws.NewMockClient(ctrl)
+
+				mockAWSClient.EXPECT().DescribePlacementGroups(request).Return(
+					&ec2.DescribePlacementGroupsOutput{
+						PlacementGroups: []*ec2.PlacementGroup{},
+					},
+					nil,
+				).Times(1)
+
+				return mockAWSClient
+			},
+		},
+		{
+			testcase: "Error because there is more than one placement group",
+			providerStatus: machinev1.AWSMachineProviderStatus{
+				InstanceID: aws.String(instanceID),
+			},
+			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
+				mockAWSClient := mockaws.NewMockClient(ctrl)
+
+				mockAWSClient.EXPECT().DescribePlacementGroups(request).Return(
+					&ec2.DescribePlacementGroupsOutput{
+						PlacementGroups: []*ec2.PlacementGroup{
+							{
+								GroupName: aws.String(pgName),
+							},
+							{
+								GroupName: aws.String(pgName),
+							},
+						},
+					},
+					nil,
+				).Times(1)
+
+				return mockAWSClient
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testcase, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			awsStatusRaw, err := RawExtensionFromProviderStatus(&tc.providerStatus)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			machineCopy := machine.DeepCopy()
+			machineCopy.Status.ProviderStatus = awsStatusRaw
+
+			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, machine, awsCredentialsSecret, userDataSecret)
+			mockAWSClient := tc.awsClientFunc(ctrl)
+
+			machineScope, err := newMachineScope(machineScopeParams{
+				client:  fakeClient,
+				machine: machineCopy,
+				awsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client) (awsclient.Client, error) {
+					return mockAWSClient, nil
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			reconciler := newReconciler(machineScope)
+
+			err = reconciler.deletePlacementGroup()
+			if !tc.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}

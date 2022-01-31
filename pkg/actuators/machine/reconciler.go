@@ -402,9 +402,11 @@ func (r *Reconciler) deletePlacementGroup() error {
 	clusterID, _ := getClusterID(r.machine)
 	found := false
 	for _, tag := range placementGroup.Tags {
-		if tag.Key == aws.String("kubernetes.io/cluster/"+clusterID) && tag.Value == aws.String("owned") {
-			found = true
-			break
+		if tag.Key != nil && tag.Value != nil {
+			if aws.StringValue(tag.Key) == "kubernetes.io/cluster/"+clusterID && aws.StringValue(tag.Value) == "owned" {
+				found = true
+				break
+			}
 		}
 	}
 	if !found {

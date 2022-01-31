@@ -281,6 +281,12 @@ func stubDescribePlacementGroupsOutput(groupName string) *ec2.DescribePlacementG
 		PlacementGroups: []*ec2.PlacementGroup{
 			{
 				GroupName: aws.String(groupName),
+				Tags: []*ec2.Tag{
+					{
+						Key:   aws.String("kubernetes.io/cluster/" + stubClusterID),
+						Value: aws.String("owned"),
+					},
+				},
 			},
 		},
 	}

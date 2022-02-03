@@ -3,6 +3,9 @@ package machine
 import (
 	"testing"
 
+	configv1 "github.com/openshift/api/config/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
@@ -182,4 +185,95 @@ func TestExtractNodeAddresses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFetchInfraResourceTags(t *testing.T) {
+	testCases := []struct {
+		testcase     string
+		instance     *configv1.Infrastructure
+		expectedTags map[string]string
+	}{
+		{
+			testcase: "UserTags_in_Spec",
+			instance: &configv1.Infrastructure{
+				TypeMeta:   metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: configv1.InfrastructureSpec{
+					CloudConfig: configv1.ConfigMapFileReference{},
+					PlatformSpec: configv1.PlatformSpec{
+						Type: "AWS",
+						AWS: &configv1.AWSPlatformSpec{
+							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "CFE"}, {Key: "tester", Value: "member1"}},
+						},
+					},
+				},
+				Status: configv1.InfrastructureStatus{},
+			},
+			expectedTags: map[string]string{"name": "CFE", "tester": "member1"},
+		},
+		{
+			testcase: "UserTags_in_Status",
+			instance: &configv1.Infrastructure{
+				TypeMeta:   metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec:       configv1.InfrastructureSpec{},
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						Type: "",
+						AWS: &configv1.AWSPlatformStatus{
+							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "CFE"}, {Key: "tester", Value: "member1"}},
+						},
+					},
+				},
+			},
+			expectedTags: map[string]string{"name": "CFE", "tester": "member1"},
+		},
+		{
+			testcase: "UserTags_in_Spec_and_Status_MergeCase",
+			instance: &configv1.Infrastructure{
+				TypeMeta:   metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{},
+				Spec: configv1.InfrastructureSpec{
+					CloudConfig: configv1.ConfigMapFileReference{},
+					PlatformSpec: configv1.PlatformSpec{
+						Type: "AWS",
+						AWS: &configv1.AWSPlatformSpec{
+							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "NewCFE"}, {Key: "tester", Value: "NewMember"}},
+						},
+					},
+				},
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						Type: "",
+						AWS: &configv1.AWSPlatformStatus{
+							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "OldCFE"}, {Key: "tester", Value: "member1"}},
+						},
+					},
+				},
+			},
+			expectedTags: map[string]string{"name": "NewCFE", "tester": "NewMember"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.testcase, func(t *testing.T) {
+			tags := fetchInfraResourceTags(tc.instance)
+			if !assertUserTags(tc.expectedTags, tags) {
+				t.Errorf("expected: %v, got: %v", tc.expectedTags, tags)
+			}
+		})
+	}
+}
+
+func assertUserTags(expected, actual map[string]string) bool {
+	if len(expected) != len(actual) {
+		return false
+	}
+
+	for key, value := range actual {
+		if expectedValue, ok := expected[key]; !ok || expectedValue != value {
+			return false
+		}
+	}
+
+	return true
 }

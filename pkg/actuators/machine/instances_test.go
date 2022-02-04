@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
+	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -968,10 +969,10 @@ func TestLaunchInstance(t *testing.T) {
 			},
 		},
 		{
-			name:                  "With a Placement Group Name which already exists",
+			name:                  "With a Placement Group Name which already exists with the correct group type",
 			instancesOutput:       stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
-			providerConfig:        stubPlacementGroupNameConfig(),
-			placementGroupsOutput: stubDescribePlacementGroupsOutput(stubPlacementGroupName),
+			providerConfig:        stubPlacementGroupConfig(stubPlacementGroupName, machinev1.AWSClusterPlacementGroupType, 0, 0),
+			placementGroupsOutput: stubDescribePlacementGroupsOutput(stubPlacementGroupName, ec2.PlacementStrategyCluster),
 			succeeds:              true,
 			infra:                 infra,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -1011,9 +1012,17 @@ func TestLaunchInstance(t *testing.T) {
 			},
 		},
 		{
+			name:                  "With a Placement Group Name which already exists with an incorrect group type",
+			instancesOutput:       stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:        stubPlacementGroupConfig(stubPlacementGroupName, machinev1.AWSClusterPlacementGroupType, 0, 0),
+			placementGroupsOutput: stubDescribePlacementGroupsOutput(stubPlacementGroupName, ec2.PlacementStrategyPartition),
+			succeeds:              false,
+			infra:                 infra,
+		},
+		{
 			name:                  "With a Placement Group Name which does not exist",
 			instancesOutput:       stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
-			providerConfig:        stubPlacementGroupNameConfig(),
+			providerConfig:        stubPlacementGroupConfig(stubPlacementGroupName, machinev1.AWSClusterPlacementGroupType, 0, 0),
 			placementGroupsOutput: &ec2.DescribePlacementGroupsOutput{},
 			succeeds:              true,
 			infra:                 infra,
@@ -1291,6 +1300,161 @@ func TestCorrectExistingTags(t *testing.T) {
 			err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePlacementGroupConfig(t *testing.T) {
+	testCases := []struct {
+		name           string
+		placement      machinev1.Placement
+		placementGroup *ec2.PlacementGroup
+		expectedError  string
+	}{
+		{
+			name: "with a nil placement group",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSClusterPlacementGroupType,
+				},
+			},
+			placementGroup: nil,
+			expectedError:  "found nil placement group",
+		},
+		{
+			name: "with a mismatched placement group name",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSClusterPlacementGroupType,
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName: aws.String("wrong-name"),
+				Strategy:  aws.String(ec2.PlacementStrategyCluster),
+			},
+			expectedError: "placement group name mismatch: wanted: \"placement-group-name\", got: \"wrong-name\"",
+		},
+		{
+			name: "with a mismatched placement group type",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSClusterPlacementGroupType,
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName: aws.String("placement-group-name"),
+				Strategy:  aws.String(ec2.PlacementStrategyPartition),
+			},
+			expectedError: "mismatch between configured placement group type and existing placement group type: wanted: \"cluster\", got: \"partition\"",
+		},
+		{
+			name: "with a mismatched placement group partition count",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSPartitionPlacementGroupType,
+					Partition: &machinev1.AWSPartitionPlacement{
+						Count:  5,
+						Number: 3,
+					},
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName:      aws.String("placement-group-name"),
+				Strategy:       aws.String(ec2.PlacementStrategyPartition),
+				PartitionCount: aws.Int64(3),
+			},
+			expectedError: "mismatch between configured placement group partition count and existing placement group partition count: wanted: 5, got: 3",
+		},
+		{
+			name: "with a mismatched placement group partition number (greater than count)",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSPartitionPlacementGroupType,
+					Partition: &machinev1.AWSPartitionPlacement{
+						Count:  3,
+						Number: 5,
+					},
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName:      aws.String("placement-group-name"),
+				Strategy:       aws.String(ec2.PlacementStrategyPartition),
+				PartitionCount: aws.Int64(3),
+			},
+			expectedError: "placement group has 3 partitions, requested partition number (5) does not exist",
+		},
+		{
+			name: "with a mismatched placement group partition number (less than 1)",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSPartitionPlacementGroupType,
+					Partition: &machinev1.AWSPartitionPlacement{
+						Count:  3,
+						Number: 0,
+					},
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName:      aws.String("placement-group-name"),
+				Strategy:       aws.String(ec2.PlacementStrategyPartition),
+				PartitionCount: aws.Int64(3),
+			},
+			expectedError: "placement group has 3 partitions, requested partition number (0) does not exist",
+		},
+		{
+			name: "with a valid partition placement group",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSPartitionPlacementGroupType,
+					Partition: &machinev1.AWSPartitionPlacement{
+						Count:  3,
+						Number: 2,
+					},
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName:      aws.String("placement-group-name"),
+				Strategy:       aws.String(ec2.PlacementStrategyPartition),
+				PartitionCount: aws.Int64(3),
+			},
+			expectedError: "",
+		},
+		{
+			name: "with a mismatched placement group partition number when not a partition placement group",
+			placement: machinev1.Placement{
+				GroupName: "placement-group-name",
+				AWSPlacementGroupUnion: machinev1.AWSPlacementGroupUnion{
+					GroupType: machinev1.AWSClusterPlacementGroupType,
+					Partition: &machinev1.AWSPartitionPlacement{
+						Count:  3,
+						Number: 5,
+					},
+				},
+			},
+			placementGroup: &ec2.PlacementGroup{
+				GroupName: aws.String("placement-group-name"),
+				Strategy:  aws.String(ec2.PlacementStrategyCluster),
+			},
+			expectedError: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			err := validatePlacementGroupConfig(tc.placement, tc.placementGroup)
+			if tc.expectedError != "" {
+				g.Expect(err).To(MatchError(tc.expectedError))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}

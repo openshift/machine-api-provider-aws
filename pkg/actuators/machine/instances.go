@@ -559,8 +559,7 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 	}
 
 	if len(placementGroups.PlacementGroups) == 1 {
-		// This is the normal path, the named placement group exists
-		return nil
+		return validatePlacementGroupConfig(placement, placementGroups.PlacementGroups[0])
 	}
 	if len(placementGroups.PlacementGroups) > 1 {
 		return fmt.Errorf("expected 1 placement group for name %q, got %d", placement.GroupName, len(placementGroups.PlacementGroups))
@@ -580,7 +579,7 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 		},
 	}
 	switch placement.GroupType {
-	case machinev1.AWSSpreadPlacementGroupType, "":
+	case machinev1.AWSSpreadPlacementGroupType:
 		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategySpread)
 	case machinev1.AWSClusterPlacementGroupType:
 		createPlacementGroupInput.SetStrategy(ec2.PlacementStrategyCluster)
@@ -590,14 +589,49 @@ func checkOrCreatePlacementGroup(client awsclient.Client, placement machinev1.Pl
 			createPlacementGroupInput.SetPartitionCount(int64(placement.Partition.Count))
 		}
 	default:
-		return fmt.Errorf("unknown placement strategy %q: valid values are %s, %s, %s and omitted", placement.GroupType, machinev1.AWSSpreadPlacementGroupType, machinev1.AWSClusterPlacementGroupType, machinev1.AWSPartitionPlacementGroupType)
+		return fmt.Errorf("unknown placement strategy %q: valid values are %s, %s, %s", placement.GroupType, machinev1.AWSSpreadPlacementGroupType, machinev1.AWSClusterPlacementGroupType, machinev1.AWSPartitionPlacementGroupType)
 	}
-
 
 	if _, err := client.CreatePlacementGroup(createPlacementGroupInput); err != nil {
 		return fmt.Errorf("unable to create placement group: %v", err)
 	}
 
+	return nil
+}
+
+// validatePlacementGroupConfig validates that the configuration of the existing placement group
+// matches the configuration from the Machine
+func validatePlacementGroupConfig(placement machinev1.Placement, placementGroup *ec2.PlacementGroup) error {
+	if placementGroup == nil {
+		return fmt.Errorf("found nil placement group")
+	}
+	if aws.StringValue(placementGroup.GroupName) != placement.GroupName {
+		return fmt.Errorf("placement group name mismatch: wanted: %q, got: %q", placement.GroupName, aws.StringValue(placementGroup.GroupName))
+	}
+	var expectedPlacementGroupType string
+	switch placement.GroupType {
+	case machinev1.AWSSpreadPlacementGroupType:
+		expectedPlacementGroupType = ec2.PlacementStrategySpread
+	case machinev1.AWSClusterPlacementGroupType:
+		expectedPlacementGroupType = ec2.PlacementStrategyCluster
+	case machinev1.AWSPartitionPlacementGroupType:
+		expectedPlacementGroupType = ec2.PlacementStrategyPartition
+	default:
+		return fmt.Errorf("unknown placement strategy %q: valid values are %s, %s and %s", placement.GroupType, machinev1.AWSSpreadPlacementGroupType, machinev1.AWSClusterPlacementGroupType, machinev1.AWSPartitionPlacementGroupType)
+	}
+
+	if aws.StringValue(placementGroup.Strategy) != expectedPlacementGroupType {
+		return mapierrors.InvalidMachineConfiguration("mismatch between configured placement group type and existing placement group type: wanted: %q, got: %q", expectedPlacementGroupType, aws.StringValue(placementGroup.Strategy))
+	}
+
+	if placement.GroupType == machinev1.AWSPartitionPlacementGroupType && placement.Partition != nil {
+		if placement.Partition.Count != 0 && int64(placement.Partition.Count) != aws.Int64Value(placementGroup.PartitionCount) {
+			return mapierrors.InvalidMachineConfiguration("mismatch between configured placement group partition count and existing placement group partition count: wanted: %d, got: %d", placement.Partition.Count, aws.Int64Value(placementGroup.PartitionCount))
+		}
+		if int64(placement.Partition.Number) > aws.Int64Value(placementGroup.PartitionCount) || placement.Partition.Number < 1 {
+			return mapierrors.InvalidMachineConfiguration("placement group has %d partitions, requested partition number (%d) does not exist", aws.Int64Value(placementGroup.PartitionCount), placement.Partition.Number)
+		}
+	}
 	return nil
 }
 

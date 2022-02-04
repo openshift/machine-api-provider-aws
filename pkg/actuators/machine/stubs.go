@@ -246,9 +246,16 @@ func stubInvalidInstanceTenancy() *machinev1.AWSMachineProviderConfig {
 	return pc
 }
 
-func stubPlacementGroupNameConfig() *machinev1.AWSMachineProviderConfig {
+func stubPlacementGroupConfig(name string, groupType machinev1.AWSPlacementGroupType, partitionCount, partitionNumber int32) *machinev1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
-	pc.Placement.GroupName = stubPlacementGroupName
+	pc.Placement.GroupName = name
+	pc.Placement.GroupType = groupType
+	if partitionCount != 0 || partitionNumber != 0 {
+		pc.Placement.Partition = &machinev1.AWSPartitionPlacement{
+			Count:  partitionCount,
+			Number: partitionNumber,
+		}
+	}
 	return pc
 }
 
@@ -288,11 +295,12 @@ func stubDescribePlacementGroupsInput(groupName string) *ec2.DescribePlacementGr
 	}
 }
 
-func stubDescribePlacementGroupsOutput(groupName string) *ec2.DescribePlacementGroupsOutput {
+func stubDescribePlacementGroupsOutput(groupName, groupStrategy string) *ec2.DescribePlacementGroupsOutput {
 	return &ec2.DescribePlacementGroupsOutput{
 		PlacementGroups: []*ec2.PlacementGroup{
 			{
 				GroupName: aws.String(groupName),
+				Strategy:  aws.String(groupStrategy),
 			},
 		},
 	}

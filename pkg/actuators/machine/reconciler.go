@@ -9,6 +9,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -211,12 +212,20 @@ func (r *Reconciler) update() error {
 	runningLen := len(runningInstances)
 	var newestInstance *ec2.Instance
 
-	// Prepare the tag list with infrastructure tags.
-	// These tags will be used to update the EC2 instance tags.
-	tagList, err := r.getTagsFromInfrastructure()
-	if err != nil {
+	clusterID, ok := getClusterID(r.machine)
+	if !ok {
+		klog.Errorf("Unable to get cluster ID for machine: %q", r.machine.Name)
+		return mapierrors.InvalidMachineConfiguration("Unable to get cluster ID for machine: %q", r.machine.Name)
+	}
+
+	infra := &configv1.Infrastructure{}
+	infraName := client.ObjectKey{Name: awsclient.GlobalInfrastuctureName}
+	if err := r.client.Get(r.Context, infraName, infra); err != nil {
 		return err
 	}
+
+	// These tags will be used to update the EC2 instance tags.
+	tagList := buildTagList(r.machine.Name, clusterID, r.providerSpec.Tags, infra)
 
 	if runningLen > 0 {
 		// It would be very unusual to have more than one here, but it is
@@ -256,25 +265,6 @@ func (r *Reconciler) update() error {
 	r.machineScope.setProviderStatus(newestInstance, conditionSuccess())
 
 	return r.requeueIfInstancePending(newestInstance)
-}
-
-func (r *Reconciler) getTagsFromInfrastructure() (map[string]string, error) {
-	infra := &configv1.Infrastructure{}
-	infraName := client.ObjectKey{Name: awsclient.GlobalInfrastuctureName}
-
-	if err := r.client.Get(r.Context, infraName, infra); err != nil {
-		return nil, fmt.Errorf("error fetching Infrastructure %q: %v", infraName.Name, err)
-	}
-	tags := make(map[string]string)
-	resourceTags, ok := fetchInfraResourceTags(infra)
-	if !ok {
-		return tags, nil
-	}
-
-	for _, value := range resourceTags {
-		tags[value.Key] = value.Value
-	}
-	return tags, nil
 }
 
 // exists returns true if machine exists.

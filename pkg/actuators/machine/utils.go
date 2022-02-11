@@ -136,7 +136,12 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]string) error {
+func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, rawTags []*ec2.Tag) error {
+	tags := make(map[string]string)
+	for _, tag := range rawTags {
+		tags[aws.StringValue(tag.Key)] = aws.StringValue(tag.Value)
+	}
+
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
 	if instance == nil || instance.InstanceId == nil {
 		return fmt.Errorf("unexpected nil found in instance: %v", instance)

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	machineactuator "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
@@ -132,7 +132,7 @@ func main() {
 	}
 
 	// Setup Scheme for all resources
-	if err := machinev1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := machinev1beta1.AddToScheme(mgr.GetScheme()); err != nil {
 		klog.Fatalf("Error setting up scheme: %v", err)
 	}
 

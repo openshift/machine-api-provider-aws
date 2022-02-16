@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
@@ -37,7 +37,7 @@ func removeDuplicatedTags(tags []*ec2.Tag) []*ec2.Tag {
 }
 
 // removeStoppedMachine removes all instances of a specific machine that are in a stopped state.
-func removeStoppedMachine(machine *machinev1.Machine, client awsclient.Client) error {
+func removeStoppedMachine(machine *machinev1beta1.Machine, client awsclient.Client) error {
 	instances, err := getStoppedInstances(machine, client)
 	if err != nil {
 		klog.Errorf("Error getting stopped instances: %v", err)
@@ -53,7 +53,7 @@ func removeStoppedMachine(machine *machinev1.Machine, client awsclient.Client) e
 	return err
 }
 
-func buildEC2Filters(inputFilters []machinev1.Filter) []*ec2.Filter {
+func buildEC2Filters(inputFilters []machinev1beta1.Filter) []*ec2.Filter {
 	filters := make([]*ec2.Filter, len(inputFilters))
 	for i, f := range inputFilters {
 		values := make([]*string, len(f.Values))
@@ -68,7 +68,7 @@ func buildEC2Filters(inputFilters []machinev1.Filter) []*ec2.Filter {
 	return filters
 }
 
-func getSecurityGroupsIDs(securityGroups []machinev1.AWSResourceReference, client awsclient.Client) ([]*string, error) {
+func getSecurityGroupsIDs(securityGroups []machinev1beta1.AWSResourceReference, client awsclient.Client) ([]*string, error) {
 	var securityGroupIDs []*string
 	for _, g := range securityGroups {
 		// ID has priority
@@ -99,13 +99,13 @@ func getSecurityGroupsIDs(securityGroups []machinev1.AWSResourceReference, clien
 	return securityGroupIDs, nil
 }
 
-func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1.AWSResourceReference, availabilityZone string, client awsclient.Client) ([]*string, error) {
+func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSResourceReference, availabilityZone string, client awsclient.Client) ([]*string, error) {
 	var subnetIDs []*string
 	// ID has priority
 	if subnet.ID != nil {
 		subnetIDs = append(subnetIDs, subnet.ID)
 	} else {
-		var filters []machinev1.Filter
+		var filters []machinev1beta1.Filter
 		if availabilityZone != "" {
 			// Improve error logging for better user experience.
 			// Otherwise, during the process of minimizing API calls, this is a good
@@ -122,7 +122,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1.AWSResourceR
 				klog.Errorf("error describing availability zones: %v", err)
 				return nil, fmt.Errorf("error describing availability zones: %v", err)
 			}
-			filters = append(filters, machinev1.Filter{Name: "availabilityZone", Values: []string{availabilityZone}})
+			filters = append(filters, machinev1beta1.Filter{Name: "availabilityZone", Values: []string{availabilityZone}})
 		}
 		filters = append(filters, subnet.Filters...)
 		klog.Info("Describing subnets based on filters")
@@ -150,7 +150,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1.AWSResourceR
 	return subnetIDs, nil
 }
 
-func getAMI(machine runtimeclient.ObjectKey, AMI machinev1.AWSResourceReference, client awsclient.Client) (*string, error) {
+func getAMI(machine runtimeclient.ObjectKey, AMI machinev1beta1.AWSResourceReference, client awsclient.Client) (*string, error) {
 	if AMI.ID != nil {
 		amiID := AMI.ID
 		klog.Infof("Using AMI %s", *amiID)
@@ -197,7 +197,7 @@ func getAMI(machine runtimeclient.ObjectKey, AMI machinev1.AWSResourceReference,
 	return nil, fmt.Errorf("AMI ID or AMI filters need to be specified")
 }
 
-func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingSpecs []machinev1.BlockDeviceMappingSpec, AMI string, client awsclient.Client) ([]*ec2.BlockDeviceMapping, error) {
+func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingSpecs []machinev1beta1.BlockDeviceMappingSpec, AMI string, client awsclient.Client) ([]*ec2.BlockDeviceMapping, error) {
 	blockDeviceMappings := make([]*ec2.BlockDeviceMapping, 0)
 
 	if len(blockDeviceMappingSpecs) == 0 {
@@ -278,7 +278,7 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 	return blockDeviceMappings, nil
 }
 
-func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1.AWSMachineProviderConfig, userData []byte, client awsclient.Client, infra *configv1.Infrastructure) (*ec2.Instance, error) {
+func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, userData []byte, client awsclient.Client, infra *configv1.Infrastructure) (*ec2.Instance, error) {
 	machineKey := runtimeclient.ObjectKey{
 		Name:      machine.Name,
 		Namespace: machine.Namespace,
@@ -311,9 +311,9 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 	}
 
 	switch machineProviderConfig.NetworkInterfaceType {
-	case machinev1.AWSENANetworkInterfaceType:
+	case machinev1beta1.AWSENANetworkInterfaceType:
 		networkInterfaces[0].InterfaceType = aws.String("interface")
-	case machinev1.AWSEFANetworkInterfaceType:
+	case machinev1beta1.AWSEFANetworkInterfaceType:
 		networkInterfaces[0].InterfaceType = aws.String("efa")
 	case "":
 		// If the user did not specify the interface type, do nothing
@@ -365,7 +365,7 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 	switch instanceTenancy {
 	case "":
 		// Do nothing when not set
-	case machinev1.DefaultTenancy, machinev1.DedicatedTenancy, machinev1.HostTenancy:
+	case machinev1beta1.DefaultTenancy, machinev1beta1.DedicatedTenancy, machinev1beta1.HostTenancy:
 		if placement == nil {
 			placement = &ec2.Placement{}
 		}
@@ -374,9 +374,9 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 	default:
 		return nil, mapierrors.CreateMachine("invalid instance tenancy: %s. Allowed options are: %s,%s,%s",
 			instanceTenancy,
-			machinev1.DefaultTenancy,
-			machinev1.DedicatedTenancy,
-			machinev1.HostTenancy)
+			machinev1beta1.DefaultTenancy,
+			machinev1beta1.DedicatedTenancy,
+			machinev1beta1.HostTenancy)
 	}
 
 	inputConfig := ec2.RunInstancesInput{
@@ -429,7 +429,7 @@ func launchInstance(machine *machinev1.Machine, machineProviderConfig *machinev1
 }
 
 // buildTagList compile a list of ec2 tags from machine provider spec and infrastructure object platform spec
-func buildTagList(machineName string, clusterID string, machineTags []machinev1.TagSpecification, infra *configv1.Infrastructure) []*ec2.Tag {
+func buildTagList(machineName string, clusterID string, machineTags []machinev1beta1.TagSpecification, infra *configv1.Infrastructure) []*ec2.Tag {
 	rawTagList := []*ec2.Tag{}
 
 	mergedTags := mergeInfrastructureAndMachineSpecTags(machineTags, infra)
@@ -450,16 +450,16 @@ func buildTagList(machineName string, clusterID string, machineTags []machinev1.
 
 // mergeInfrastructureAndMachineSpecTags merge list of tags from machine provider spec and Infrastructure object platform spec.
 // Machine tags have precedence over Infrastructure
-func mergeInfrastructureAndMachineSpecTags(machineSpecTags []machinev1.TagSpecification, infra *configv1.Infrastructure) []machinev1.TagSpecification {
+func mergeInfrastructureAndMachineSpecTags(machineSpecTags []machinev1beta1.TagSpecification, infra *configv1.Infrastructure) []machinev1beta1.TagSpecification {
 	if infra == nil || infra.Status.PlatformStatus == nil || infra.Status.PlatformStatus.AWS == nil || infra.Status.PlatformStatus.AWS.ResourceTags == nil {
 		return machineSpecTags
 	}
 
-	mergedList := []machinev1.TagSpecification{}
+	mergedList := []machinev1beta1.TagSpecification{}
 	mergedList = append(mergedList, machineSpecTags...)
 
 	for _, tag := range infra.Status.PlatformStatus.AWS.ResourceTags {
-		mergedList = append(mergedList, machinev1.TagSpecification{Name: tag.Key, Value: tag.Value})
+		mergedList = append(mergedList, machinev1beta1.TagSpecification{Name: tag.Key, Value: tag.Value})
 	}
 
 	return mergedList
@@ -496,7 +496,7 @@ func sortInstances(instances []*ec2.Instance) {
 	sort.Sort(instanceList(instances))
 }
 
-func getInstanceMarketOptionsRequest(providerConfig *machinev1.AWSMachineProviderConfig) *ec2.InstanceMarketOptionsRequest {
+func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.InstanceMarketOptionsRequest {
 	if providerConfig.SpotMarketOptions == nil {
 		// Instance is not a Spot instance
 		return nil

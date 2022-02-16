@@ -10,7 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -90,7 +90,7 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 		g.Expect(machinecontroller.AddWithActuator(mgr, actuator)).To(Succeed())
 	}
 
-	var machine *machinev1.Machine
+	var machine *machinev1beta1.Machine
 	var machineKey runtimeclient.ObjectKey
 	{ // Init and create the machine and infrastructure object
 		log.Printf("Initialising and creating the Machine and supporting resources")

@@ -1087,7 +1087,7 @@ func TestCorrectExistingTags(t *testing.T) {
 	testCases := []struct {
 		name               string
 		tags               []*ec2.Tag
-		userTags           map[string]string
+		userTags           []*ec2.Tag
 		expectedCreateTags bool
 	}{
 		{
@@ -1117,7 +1117,12 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags:           map[string]string{"UserDefinedTag2": "UserDefinedTagValue2"},
+			userTags: []*ec2.Tag{
+				{
+					Key:   aws.String("UserDefinedTag2"),
+					Value: aws.String("UserDefinedTagValue2"),
+				},
+			},
 		},
 		{
 			name: "Valid Tags and Update",
@@ -1136,7 +1141,12 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags:           map[string]string{"UserDefinedTag1": "ModifiedValue"},
+			userTags: []*ec2.Tag{
+				{
+					Key:   aws.String("UserDefinedTag1"),
+					Value: aws.String("ModifiedValue"),
+				},
+			},
 		},
 		{
 			name: "Invalid Name Tag Correct Cluster",

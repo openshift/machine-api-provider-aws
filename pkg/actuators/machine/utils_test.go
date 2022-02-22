@@ -5,7 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -13,7 +13,7 @@ import (
 
 func init() {
 	// Add types to scheme
-	machinev1.AddToScheme(scheme.Scheme)
+	machinev1beta1.AddToScheme(scheme.Scheme)
 }
 
 func TestExtractNodeAddresses(t *testing.T) {

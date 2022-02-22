@@ -26,7 +26,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -63,13 +63,13 @@ func getRunningFromInstances(instances []*ec2.Instance) []*ec2.Instance {
 
 // getStoppedInstances returns all stopped instances that have a tag matching our machine name,
 // and cluster ID.
-func getStoppedInstances(machine *machinev1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
+func getStoppedInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
 	stoppedInstanceStateFilter := []*string{aws.String(ec2.InstanceStateNameStopped), aws.String(ec2.InstanceStateNameStopping)}
 	return getInstances(machine, client, stoppedInstanceStateFilter)
 }
 
 // getExistingInstances returns all instances not terminated
-func getExistingInstances(machine *machinev1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
+func getExistingInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
 	return getInstances(machine, client, existingInstanceStates())
 }
 
@@ -136,7 +136,7 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, rawTags []*ec2.Tag) error {
+func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance, client awsclient.Client, rawTags []*ec2.Tag) error {
 	tags := make(map[string]string)
 	for _, tag := range rawTags {
 		tags[aws.StringValue(tag.Key)] = aws.StringValue(tag.Value)
@@ -204,7 +204,7 @@ func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, cli
 
 // getInstances returns all instances that have a tag matching our machine name,
 // and cluster ID.
-func getInstances(machine *machinev1.Machine, client awsclient.Client, instanceStateFilter []*string) ([]*ec2.Instance, error) {
+func getInstances(machine *machinev1beta1.Machine, client awsclient.Client, instanceStateFilter []*string) ([]*ec2.Instance, error) {
 	clusterID, ok := getClusterID(machine)
 	if !ok {
 		return []*ec2.Instance{}, fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
@@ -277,7 +277,7 @@ func terminateInstances(client awsclient.Client, instances []*ec2.Instance) ([]*
 // a condition will be added to the slice
 // If the machine does already have a condition with the specified type,
 // the condition will be updated if either of the following are true.
-func setAWSMachineProviderCondition(condition machinev1.AWSMachineProviderCondition, conditions []machinev1.AWSMachineProviderCondition) []machinev1.AWSMachineProviderCondition {
+func setAWSMachineProviderCondition(condition machinev1beta1.AWSMachineProviderCondition, conditions []machinev1beta1.AWSMachineProviderCondition) []machinev1beta1.AWSMachineProviderCondition {
 	now := metav1.Now()
 
 	if existingCondition := findProviderCondition(conditions, condition.Type); existingCondition == nil {
@@ -291,7 +291,7 @@ func setAWSMachineProviderCondition(condition machinev1.AWSMachineProviderCondit
 	return conditions
 }
 
-func findProviderCondition(conditions []machinev1.AWSMachineProviderCondition, conditionType machinev1.ConditionType) *machinev1.AWSMachineProviderCondition {
+func findProviderCondition(conditions []machinev1beta1.AWSMachineProviderCondition, conditionType machinev1beta1.ConditionType) *machinev1beta1.AWSMachineProviderCondition {
 	for i := range conditions {
 		if conditions[i].Type == conditionType {
 			return &conditions[i]
@@ -300,7 +300,7 @@ func findProviderCondition(conditions []machinev1.AWSMachineProviderCondition, c
 	return nil
 }
 
-func updateExistingCondition(newCondition, existingCondition *machinev1.AWSMachineProviderCondition) {
+func updateExistingCondition(newCondition, existingCondition *machinev1beta1.AWSMachineProviderCondition) {
 	if !shouldUpdateCondition(newCondition, existingCondition) {
 		return
 	}
@@ -314,7 +314,7 @@ func updateExistingCondition(newCondition, existingCondition *machinev1.AWSMachi
 	existingCondition.LastProbeTime = newCondition.LastProbeTime
 }
 
-func shouldUpdateCondition(newCondition, existingCondition *machinev1.AWSMachineProviderCondition) bool {
+func shouldUpdateCondition(newCondition, existingCondition *machinev1beta1.AWSMachineProviderCondition) bool {
 	return newCondition.Reason != existingCondition.Reason || newCondition.Message != existingCondition.Message
 }
 
@@ -390,35 +390,35 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 	return addresses, nil
 }
 
-func conditionSuccess() machinev1.AWSMachineProviderCondition {
-	return machinev1.AWSMachineProviderCondition{
-		Type:    machinev1.MachineCreation,
+func conditionSuccess() machinev1beta1.AWSMachineProviderCondition {
+	return machinev1beta1.AWSMachineProviderCondition{
+		Type:    machinev1beta1.MachineCreation,
 		Status:  corev1.ConditionTrue,
-		Reason:  machinev1.MachineCreationSucceededConditionReason,
+		Reason:  machinev1beta1.MachineCreationSucceededConditionReason,
 		Message: "Machine successfully created",
 	}
 }
 
-func conditionFailed() machinev1.AWSMachineProviderCondition {
-	return machinev1.AWSMachineProviderCondition{
-		Type:   machinev1.MachineCreation,
+func conditionFailed() machinev1beta1.AWSMachineProviderCondition {
+	return machinev1beta1.AWSMachineProviderCondition{
+		Type:   machinev1beta1.MachineCreation,
 		Status: corev1.ConditionFalse,
-		Reason: machinev1.MachineCreationFailedConditionReason,
+		Reason: machinev1beta1.MachineCreationFailedConditionReason,
 	}
 }
 
 // validateMachine check the label that a machine must have to identify the cluster to which it belongs is present.
-func validateMachine(machine machinev1.Machine) error {
-	if machine.Labels[machinev1.MachineClusterIDLabel] == "" {
-		return machinecontroller.InvalidMachineConfiguration("%v: missing %q label", machine.GetName(), machinev1.MachineClusterIDLabel)
+func validateMachine(machine machinev1beta1.Machine) error {
+	if machine.Labels[machinev1beta1.MachineClusterIDLabel] == "" {
+		return machinecontroller.InvalidMachineConfiguration("%v: missing %q label", machine.GetName(), machinev1beta1.MachineClusterIDLabel)
 	}
 
 	return nil
 }
 
 // getClusterID get cluster ID by machine.openshift.io/cluster-api-cluster label
-func getClusterID(machine *machinev1.Machine) (string, bool) {
-	clusterID, ok := machine.Labels[machinev1.MachineClusterIDLabel]
+func getClusterID(machine *machinev1beta1.Machine) (string, bool) {
+	clusterID, ok := machine.Labels[machinev1beta1.MachineClusterIDLabel]
 	// TODO: remove 347-350
 	// NOTE: This block can be removed after the label renaming transition to machine.openshift.io
 	if !ok {
@@ -428,7 +428,7 @@ func getClusterID(machine *machinev1.Machine) (string, bool) {
 }
 
 // RawExtensionFromProviderSpec marshals the machine provider spec.
-func RawExtensionFromProviderSpec(spec *machinev1.AWSMachineProviderConfig) (*runtime.RawExtension, error) {
+func RawExtensionFromProviderSpec(spec *machinev1beta1.AWSMachineProviderConfig) (*runtime.RawExtension, error) {
 	if spec == nil {
 		return &runtime.RawExtension{}, nil
 	}
@@ -445,7 +445,7 @@ func RawExtensionFromProviderSpec(spec *machinev1.AWSMachineProviderConfig) (*ru
 }
 
 // RawExtensionFromProviderStatus marshals the machine provider status
-func RawExtensionFromProviderStatus(status *machinev1.AWSMachineProviderStatus) (*runtime.RawExtension, error) {
+func RawExtensionFromProviderStatus(status *machinev1beta1.AWSMachineProviderStatus) (*runtime.RawExtension, error) {
 	if status == nil {
 		return &runtime.RawExtension{}, nil
 	}
@@ -462,12 +462,12 @@ func RawExtensionFromProviderStatus(status *machinev1.AWSMachineProviderStatus) 
 }
 
 // ProviderSpecFromRawExtension unmarshals a raw extension into an AWSMachineProviderSpec type
-func ProviderSpecFromRawExtension(rawExtension *runtime.RawExtension) (*machinev1.AWSMachineProviderConfig, error) {
+func ProviderSpecFromRawExtension(rawExtension *runtime.RawExtension) (*machinev1beta1.AWSMachineProviderConfig, error) {
 	if rawExtension == nil {
-		return &machinev1.AWSMachineProviderConfig{}, nil
+		return &machinev1beta1.AWSMachineProviderConfig{}, nil
 	}
 
-	spec := new(machinev1.AWSMachineProviderConfig)
+	spec := new(machinev1beta1.AWSMachineProviderConfig)
 	if err := json.Unmarshal(rawExtension.Raw, &spec); err != nil {
 		return nil, fmt.Errorf("error unmarshalling providerSpec: %v", err)
 	}
@@ -477,12 +477,12 @@ func ProviderSpecFromRawExtension(rawExtension *runtime.RawExtension) (*machinev
 }
 
 // ProviderStatusFromRawExtension unmarshals a raw extension into an AWSMachineProviderStatus type
-func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machinev1.AWSMachineProviderStatus, error) {
+func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machinev1beta1.AWSMachineProviderStatus, error) {
 	if rawExtension == nil {
-		return &machinev1.AWSMachineProviderStatus{}, nil
+		return &machinev1beta1.AWSMachineProviderStatus{}, nil
 	}
 
-	providerStatus := new(machinev1.AWSMachineProviderStatus)
+	providerStatus := new(machinev1beta1.AWSMachineProviderStatus)
 	if err := json.Unmarshal(rawExtension.Raw, providerStatus); err != nil {
 		return nil, fmt.Errorf("error unmarshalling providerStatus: %v", err)
 	}

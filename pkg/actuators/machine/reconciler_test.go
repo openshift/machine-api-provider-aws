@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -25,7 +25,7 @@ import (
 
 func init() {
 	// Add types to scheme
-	machinev1.AddToScheme(scheme.Scheme)
+	machinev1beta1.AddToScheme(scheme.Scheme)
 	configv1.AddToScheme(scheme.Scheme)
 }
 
@@ -82,7 +82,7 @@ func TestAvailabilityZone(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			machine.Spec.ProviderSpec = machinev1.ProviderSpec{Value: config}
+			machine.Spec.ProviderSpec = machinev1beta1.ProviderSpec{Value: config}
 
 			fakeClient := fake.NewFakeClient(machine, awsCredentialsSecret, userDataSecret)
 
@@ -198,41 +198,41 @@ func TestCreate(t *testing.T) {
 
 	testCases := []struct {
 		testcase             string
-		providerConfig       *machinev1.AWSMachineProviderConfig
+		providerConfig       *machinev1beta1.AWSMachineProviderConfig
 		userDataSecret       *corev1.Secret
 		awsCredentialsSecret *corev1.Secret
 		expectedError        error
 	}{
 		{
 			testcase: "Create succeed",
-			providerConfig: &machinev1.AWSMachineProviderConfig{
-				AMI: machinev1.AWSResourceReference{
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				AMI: machinev1beta1.AWSResourceReference{
 					ID: aws.String("ami-a9acbbd6"),
 				},
 				CredentialsSecret: &corev1.LocalObjectReference{
 					Name: awsCredentialsSecretName,
 				},
 				InstanceType: "m4.xlarge",
-				Placement: machinev1.Placement{
+				Placement: machinev1beta1.Placement{
 					Region:           region,
 					AvailabilityZone: defaultAvailabilityZone,
 				},
-				Subnet: machinev1.AWSResourceReference{
+				Subnet: machinev1beta1.AWSResourceReference{
 					ID: aws.String("subnet-0e56b13a64ff8a941"),
 				},
-				IAMInstanceProfile: &machinev1.AWSResourceReference{
+				IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 					ID: aws.String("openshift_master_launch_instances"),
 				},
 				KeyName: aws.String(keyName),
 				UserDataSecret: &corev1.LocalObjectReference{
 					Name: userDataSecretName,
 				},
-				Tags: []machinev1.TagSpecification{
+				Tags: []machinev1beta1.TagSpecification{
 					{Name: "openshift-node-group-config", Value: "node-config-master"},
 					{Name: "host-type", Value: "master"},
 					{Name: "sub-host-type", Value: "default"},
 				},
-				SecurityGroups: []machinev1.AWSResourceReference{
+				SecurityGroups: []machinev1beta1.AWSResourceReference{
 					{ID: aws.String("sg-00868b02fbe29de17")},
 					{ID: aws.String("sg-0a4658991dc5eb40a")},
 					{ID: aws.String("sg-009a70e28fa4ba84e")},
@@ -240,22 +240,22 @@ func TestCreate(t *testing.T) {
 					{ID: aws.String("sg-08b1ffd32874d59a2")},
 				},
 				PublicIP: aws.Bool(true),
-				LoadBalancers: []machinev1.LoadBalancerReference{
+				LoadBalancers: []machinev1beta1.LoadBalancerReference{
 					{
 						Name: "cluster-con",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-ext",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-int",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-net-lb",
-						Type: machinev1.NetworkLoadBalancerType,
+						Type: machinev1beta1.NetworkLoadBalancerType,
 					},
 				},
 			},
@@ -265,34 +265,34 @@ func TestCreate(t *testing.T) {
 		},
 		{
 			testcase: "Bad userData",
-			providerConfig: &machinev1.AWSMachineProviderConfig{
-				AMI: machinev1.AWSResourceReference{
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				AMI: machinev1beta1.AWSResourceReference{
 					ID: aws.String("ami-a9acbbd6"),
 				},
 				CredentialsSecret: &corev1.LocalObjectReference{
 					Name: awsCredentialsSecretName,
 				},
 				InstanceType: "m4.xlarge",
-				Placement: machinev1.Placement{
+				Placement: machinev1beta1.Placement{
 					Region:           region,
 					AvailabilityZone: defaultAvailabilityZone,
 				},
-				Subnet: machinev1.AWSResourceReference{
+				Subnet: machinev1beta1.AWSResourceReference{
 					ID: aws.String("subnet-0e56b13a64ff8a941"),
 				},
-				IAMInstanceProfile: &machinev1.AWSResourceReference{
+				IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 					ID: aws.String("openshift_master_launch_instances"),
 				},
 				KeyName: aws.String(keyName),
 				UserDataSecret: &corev1.LocalObjectReference{
 					Name: userDataSecretName,
 				},
-				Tags: []machinev1.TagSpecification{
+				Tags: []machinev1beta1.TagSpecification{
 					{Name: "openshift-node-group-config", Value: "node-config-master"},
 					{Name: "host-type", Value: "master"},
 					{Name: "sub-host-type", Value: "default"},
 				},
-				SecurityGroups: []machinev1.AWSResourceReference{
+				SecurityGroups: []machinev1beta1.AWSResourceReference{
 					{ID: aws.String("sg-00868b02fbe29de17")},
 					{ID: aws.String("sg-0a4658991dc5eb40a")},
 					{ID: aws.String("sg-009a70e28fa4ba84e")},
@@ -300,22 +300,22 @@ func TestCreate(t *testing.T) {
 					{ID: aws.String("sg-08b1ffd32874d59a2")},
 				},
 				PublicIP: aws.Bool(true),
-				LoadBalancers: []machinev1.LoadBalancerReference{
+				LoadBalancers: []machinev1beta1.LoadBalancerReference{
 					{
 						Name: "cluster-con",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-ext",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-int",
-						Type: machinev1.ClassicLoadBalancerType,
+						Type: machinev1beta1.ClassicLoadBalancerType,
 					},
 					{
 						Name: "cluster-net-lb",
-						Type: machinev1.NetworkLoadBalancerType,
+						Type: machinev1beta1.NetworkLoadBalancerType,
 					},
 				},
 			},
@@ -333,35 +333,35 @@ func TestCreate(t *testing.T) {
 		},
 		{
 			testcase: "Failed security groups return invalid config machine error",
-			providerConfig: &machinev1.AWSMachineProviderConfig{
-				AMI: machinev1.AWSResourceReference{
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				AMI: machinev1beta1.AWSResourceReference{
 					ID: aws.String("ami-a9acbbd6"),
 				},
 				CredentialsSecret: &corev1.LocalObjectReference{
 					Name: awsCredentialsSecretName,
 				},
 				InstanceType: "m4.xlarge",
-				Placement: machinev1.Placement{
+				Placement: machinev1beta1.Placement{
 					Region:           region,
 					AvailabilityZone: defaultAvailabilityZone,
 				},
-				Subnet: machinev1.AWSResourceReference{
+				Subnet: machinev1beta1.AWSResourceReference{
 					ID: aws.String("subnet-0e56b13a64ff8a941"),
 				},
-				IAMInstanceProfile: &machinev1.AWSResourceReference{
+				IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 					ID: aws.String("openshift_master_launch_instances"),
 				},
 				KeyName: aws.String(keyName),
 				UserDataSecret: &corev1.LocalObjectReference{
 					Name: userDataSecretName,
 				},
-				Tags: []machinev1.TagSpecification{
+				Tags: []machinev1beta1.TagSpecification{
 					{Name: "openshift-node-group-config", Value: "node-config-master"},
 					{Name: "host-type", Value: "master"},
 					{Name: "sub-host-type", Value: "default"},
 				},
-				SecurityGroups: []machinev1.AWSResourceReference{{
-					Filters: []machinev1.Filter{{
+				SecurityGroups: []machinev1beta1.AWSResourceReference{{
+					Filters: []machinev1beta1.Filter{{
 						Name:   "tag:Name",
 						Values: []string{fmt.Sprintf("%s-%s-sg", stubClusterID, "role")},
 					}},
@@ -374,37 +374,37 @@ func TestCreate(t *testing.T) {
 		},
 		{
 			testcase: "Failed Availability zones return invalid config machine error",
-			providerConfig: &machinev1.AWSMachineProviderConfig{
-				AMI: machinev1.AWSResourceReference{
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				AMI: machinev1beta1.AWSResourceReference{
 					ID: aws.String("ami-a9acbbd6"),
 				},
 				CredentialsSecret: &corev1.LocalObjectReference{
 					Name: awsCredentialsSecretName,
 				},
 				InstanceType: "m4.xlarge",
-				Placement: machinev1.Placement{
+				Placement: machinev1beta1.Placement{
 					Region:           region,
 					AvailabilityZone: defaultAvailabilityZone,
 				},
-				Subnet: machinev1.AWSResourceReference{
-					Filters: []machinev1.Filter{{
+				Subnet: machinev1beta1.AWSResourceReference{
+					Filters: []machinev1beta1.Filter{{
 						Name:   "tag:Name",
 						Values: []string{fmt.Sprintf("%s-private-%s", stubClusterID, "az")},
 					}},
 				},
-				IAMInstanceProfile: &machinev1.AWSResourceReference{
+				IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 					ID: aws.String("openshift_master_launch_instances"),
 				},
 				KeyName: aws.String(keyName),
 				UserDataSecret: &corev1.LocalObjectReference{
 					Name: userDataSecretName,
 				},
-				Tags: []machinev1.TagSpecification{
+				Tags: []machinev1beta1.TagSpecification{
 					{Name: "openshift-node-group-config", Value: "node-config-master"},
 					{Name: "host-type", Value: "master"},
 					{Name: "sub-host-type", Value: "default"},
 				},
-				SecurityGroups: []machinev1.AWSResourceReference{
+				SecurityGroups: []machinev1beta1.AWSResourceReference{
 					{ID: aws.String("sg-00868b02fbe29de17")},
 					{ID: aws.String("sg-0a4658991dc5eb40a")},
 					{ID: aws.String("sg-009a70e28fa4ba84e")},
@@ -419,43 +419,43 @@ func TestCreate(t *testing.T) {
 		},
 		{
 			testcase: "Failed BlockDevices return invalid config machine error",
-			providerConfig: &machinev1.AWSMachineProviderConfig{
-				AMI: machinev1.AWSResourceReference{
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				AMI: machinev1beta1.AWSResourceReference{
 					ID: aws.String("ami-a9acbbd6"),
 				},
 				CredentialsSecret: &corev1.LocalObjectReference{
 					Name: awsCredentialsSecretName,
 				},
 				InstanceType: "m4.xlarge",
-				Placement: machinev1.Placement{
+				Placement: machinev1beta1.Placement{
 					Region:           region,
 					AvailabilityZone: defaultAvailabilityZone,
 				},
-				BlockDevices: []machinev1.BlockDeviceMappingSpec{
+				BlockDevices: []machinev1beta1.BlockDeviceMappingSpec{
 					{
-						EBS: &machinev1.EBSBlockDeviceSpec{
+						EBS: &machinev1beta1.EBSBlockDeviceSpec{
 							VolumeType: pointer.StringPtr("type"),
 							VolumeSize: pointer.Int64Ptr(int64(1)),
 							Iops:       pointer.Int64Ptr(int64(1)),
 						},
 					},
 				},
-				Subnet: machinev1.AWSResourceReference{
+				Subnet: machinev1beta1.AWSResourceReference{
 					ID: aws.String("subnet-0e56b13a64ff8a941"),
 				},
-				IAMInstanceProfile: &machinev1.AWSResourceReference{
+				IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 					ID: aws.String("openshift_master_launch_instances"),
 				},
 				KeyName: aws.String(keyName),
 				UserDataSecret: &corev1.LocalObjectReference{
 					Name: userDataSecretName,
 				},
-				Tags: []machinev1.TagSpecification{
+				Tags: []machinev1beta1.TagSpecification{
 					{Name: "openshift-node-group-config", Value: "node-config-master"},
 					{Name: "host-type", Value: "master"},
 					{Name: "sub-host-type", Value: "default"},
 				},
-				SecurityGroups: []machinev1.AWSResourceReference{
+				SecurityGroups: []machinev1beta1.AWSResourceReference{
 					{ID: aws.String("sg-00868b02fbe29de17")},
 					{ID: aws.String("sg-0a4658991dc5eb40a")},
 					{ID: aws.String("sg-009a70e28fa4ba84e")},
@@ -481,7 +481,7 @@ func TestCreate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		machine.Spec.ProviderSpec = machinev1.ProviderSpec{Value: encodedProviderConfig}
+		machine.Spec.ProviderSpec = machinev1beta1.ProviderSpec{Value: encodedProviderConfig}
 
 		fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, machine, tc.awsCredentialsSecret, tc.userDataSecret, stubInfraObject())
 
@@ -544,14 +544,14 @@ func TestCreate(t *testing.T) {
 func TestExists(t *testing.T) {
 	testCases := []struct {
 		name          string
-		machine       func() *machinev1.Machine
+		machine       func() *machinev1beta1.Machine
 		expectedError error
 		existsResult  bool
 		awsClient     func(ctrl *gomock.Controller) awsclient.Client
 	}{
 		{
 			name: "Successfully find created instance",
-			machine: func() *machinev1.Machine {
+			machine: func() *machinev1beta1.Machine {
 				machine, err := stubMachine()
 				if err != nil {
 					t.Fatalf("unable to build stub machine: %v", err)
@@ -570,7 +570,7 @@ func TestExists(t *testing.T) {
 		},
 		{
 			name: "Requeue if machine has providerID and addresses are not set",
-			machine: func() *machinev1.Machine {
+			machine: func() *machinev1beta1.Machine {
 				machine, err := stubMachine()
 				if err != nil {
 					t.Fatalf("unable to build stub machine: %v", err)
@@ -594,7 +594,7 @@ func TestExists(t *testing.T) {
 		},
 		{
 			name: "Fail to find instance",
-			machine: func() *machinev1.Machine {
+			machine: func() *machinev1beta1.Machine {
 				machine, err := stubMachine()
 				if err != nil {
 					t.Fatalf("unable to build stub machine: %v", err)
@@ -660,13 +660,13 @@ func TestUpdate(t *testing.T) {
 	// TODO: check machine object after calling update()
 	testCases := []struct {
 		name          string
-		machine       func() *machinev1.Machine
+		machine       func() *machinev1beta1.Machine
 		expectedError error
 		awsClient     func(ctrl *gomock.Controller) awsclient.Client
 	}{
 		{
 			name: "Successfully update the machine",
-			machine: func() *machinev1.Machine {
+			machine: func() *machinev1beta1.Machine {
 				machine, err := stubMachine()
 				if err != nil {
 					t.Fatalf("unable to build stub machine: %v", err)
@@ -692,7 +692,7 @@ func TestUpdate(t *testing.T) {
 		},
 		{
 			name: "Requeue if machine has providerID and addresses are not set",
-			machine: func() *machinev1.Machine {
+			machine: func() *machinev1beta1.Machine {
 				machine, err := stubMachine()
 				if err != nil {
 					t.Fatalf("unable to build stub machine: %v", err)
@@ -776,13 +776,13 @@ func TestGetMachineInstances(t *testing.T) {
 
 	testCases := []struct {
 		testcase       string
-		providerStatus machinev1.AWSMachineProviderStatus
+		providerStatus machinev1beta1.AWSMachineProviderStatus
 		awsClientFunc  func(*gomock.Controller) awsclient.Client
 		exists         bool
 	}{
 		{
 			testcase:       "empty-status-search-by-tag",
-			providerStatus: machinev1.AWSMachineProviderStatus{},
+			providerStatus: machinev1beta1.AWSMachineProviderStatus{},
 			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
 				mockAWSClient := mockaws.NewMockClient(ctrl)
 
@@ -808,7 +808,7 @@ func TestGetMachineInstances(t *testing.T) {
 		},
 		{
 			testcase: "has-status-search-by-id-running",
-			providerStatus: machinev1.AWSMachineProviderStatus{
+			providerStatus: machinev1beta1.AWSMachineProviderStatus{
 				InstanceID: aws.String(instanceID),
 			},
 			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
@@ -829,7 +829,7 @@ func TestGetMachineInstances(t *testing.T) {
 		},
 		{
 			testcase: "has-status-search-by-id-terminated",
-			providerStatus: machinev1.AWSMachineProviderStatus{
+			providerStatus: machinev1beta1.AWSMachineProviderStatus{
 				InstanceID: aws.String(instanceID),
 			},
 			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {

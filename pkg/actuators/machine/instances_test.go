@@ -10,9 +10,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestRemoveDuplicatedTags(t *testing.T) {
@@ -59,13 +62,13 @@ func TestRemoveDuplicatedTags(t *testing.T) {
 func TestBuildTagList(t *testing.T) {
 	cases := []struct {
 		name            string
-		machineSpecTags []machinev1.TagSpecification
+		machineSpecTags []machinev1beta1.TagSpecification
 		infra           *configv1.Infrastructure
 		expected        []*ec2.Tag
 	}{
 		{
 			name:            "with empty infra and provider spec should return default tags",
-			machineSpecTags: []machinev1.TagSpecification{},
+			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra: &configv1.Infrastructure{
 				Status: configv1.InfrastructureStatus{
 					PlatformStatus: &configv1.PlatformStatus{
@@ -82,7 +85,7 @@ func TestBuildTagList(t *testing.T) {
 		},
 		{
 			name:            "with empty infra should return default tags",
-			machineSpecTags: []machinev1.TagSpecification{},
+			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra:           &configv1.Infrastructure{}, // should work with empty infra object
 			expected: []*ec2.Tag{
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
@@ -91,7 +94,7 @@ func TestBuildTagList(t *testing.T) {
 		},
 		{
 			name:            "with nil infra should  return default tags",
-			machineSpecTags: []machinev1.TagSpecification{},
+			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra:           nil, // should work with nil infra object
 			expected: []*ec2.Tag{
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
@@ -100,7 +103,7 @@ func TestBuildTagList(t *testing.T) {
 		},
 		{
 			name: "should filter out bad tags from provider spec",
-			machineSpecTags: []machinev1.TagSpecification{
+			machineSpecTags: []machinev1beta1.TagSpecification{
 				{Name: "Name", Value: "badname"},
 				{Name: "kubernetes.io/cluster/badid", Value: "badvalue"},
 				{Name: "good", Value: "goodvalue"},
@@ -115,7 +118,7 @@ func TestBuildTagList(t *testing.T) {
 		},
 		{
 			name:            "should filter out bad tags from infra object",
-			machineSpecTags: []machinev1.TagSpecification{},
+			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra: &configv1.Infrastructure{
 				Status: configv1.InfrastructureStatus{
 					PlatformStatus: &configv1.PlatformStatus{
@@ -147,7 +150,7 @@ func TestBuildTagList(t *testing.T) {
 		},
 		{
 			name: "tags from machine object should have precedence",
-			machineSpecTags: []machinev1.TagSpecification{
+			machineSpecTags: []machinev1beta1.TagSpecification{
 				{Name: "Name", Value: "badname"},
 				{Name: "kubernetes.io/cluster/badid", Value: "badvalue"},
 				{Name: "good", Value: "goodvalue"},
@@ -190,7 +193,7 @@ func TestBuildEC2Filters(t *testing.T) {
 	value2 := "B"
 	value3 := "C"
 
-	inputFilters := []machinev1.Filter{
+	inputFilters := []machinev1beta1.Filter{
 		{
 			Name:   filter1,
 			Values: []string{value1, value2},
@@ -238,10 +241,10 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 	}, nil).AnyTimes()
 
-	oneBlockDevice := []machinev1.BlockDeviceMappingSpec{
+	oneBlockDevice := []machinev1beta1.BlockDeviceMappingSpec{
 		{
 			DeviceName: &rootDeviceName,
-			EBS: &machinev1.EBSBlockDeviceSpec{
+			EBS: &machinev1beta1.EBSBlockDeviceSpec{
 				VolumeSize: &volumeSize,
 				VolumeType: &volumeType,
 			},
@@ -263,10 +266,10 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 	}
 
-	blockDevices := []machinev1.BlockDeviceMappingSpec{
+	blockDevices := []machinev1beta1.BlockDeviceMappingSpec{
 		{
 			DeviceName: &rootDeviceName,
-			EBS: &machinev1.EBSBlockDeviceSpec{
+			EBS: &machinev1beta1.EBSBlockDeviceSpec{
 				VolumeSize: &volumeSize,
 				VolumeType: &volumeType,
 			},
@@ -275,7 +278,7 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 		{
 			DeviceName: &deviceName2,
-			EBS: &machinev1.EBSBlockDeviceSpec{
+			EBS: &machinev1beta1.EBSBlockDeviceSpec{
 				VolumeSize: &volumeSize2,
 				VolumeType: &volumeType,
 			},
@@ -307,23 +310,23 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 	}
 
-	blockDevicesOneEmptyName := make([]machinev1.BlockDeviceMappingSpec, len(blockDevices))
+	blockDevicesOneEmptyName := make([]machinev1beta1.BlockDeviceMappingSpec, len(blockDevices))
 	copy(blockDevicesOneEmptyName, blockDevices)
 	blockDevicesOneEmptyName[0].DeviceName = nil
 
-	blockDevicesTwoEmptyNames := make([]machinev1.BlockDeviceMappingSpec, len(blockDevicesOneEmptyName))
+	blockDevicesTwoEmptyNames := make([]machinev1beta1.BlockDeviceMappingSpec, len(blockDevicesOneEmptyName))
 	copy(blockDevicesTwoEmptyNames, blockDevicesOneEmptyName)
 	blockDevicesTwoEmptyNames[1].DeviceName = nil
 
 	testCases := []struct {
 		description  string
-		blockDevices []machinev1.BlockDeviceMappingSpec
+		blockDevices []machinev1beta1.BlockDeviceMappingSpec
 		expected     []*ec2.BlockDeviceMapping
 		expectedErr  bool
 	}{
 		{
 			description:  "When it gets an empty blockDevices list",
-			blockDevices: []machinev1.BlockDeviceMappingSpec{},
+			blockDevices: []machinev1beta1.BlockDeviceMappingSpec{},
 			expected:     []*ec2.BlockDeviceMapping{},
 		},
 		{
@@ -464,7 +467,7 @@ func TestLaunchInstance(t *testing.T) {
 
 	cases := []struct {
 		name                string
-		providerConfig      *machinev1.AWSMachineProviderConfig
+		providerConfig      *machinev1beta1.AWSMachineProviderConfig
 		securityGroupOutput *ec2.DescribeSecurityGroupsOutput
 		securityGroupErr    error
 		subnetOutput        *ec2.DescribeSubnetsOutput
@@ -474,6 +477,7 @@ func TestLaunchInstance(t *testing.T) {
 		imageErr            error
 		instancesOutput     *ec2.Reservation
 		instancesErr        error
+		objects             []runtime.Object
 		succeeds            bool
 		runInstancesInput   *ec2.RunInstancesInput
 		infra               *configv1.Infrastructure
@@ -481,9 +485,9 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name: "Security groups with filters",
 			providerConfig: stubPCSecurityGroups(
-				[]machinev1.AWSResourceReference{
+				[]machinev1beta1.AWSResourceReference{
 					{
-						Filters: []machinev1.Filter{},
+						Filters: []machinev1beta1.Filter{},
 					},
 				},
 			),
@@ -526,9 +530,9 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name: "Security groups with filters with error",
 			providerConfig: stubPCSecurityGroups(
-				[]machinev1.AWSResourceReference{
+				[]machinev1beta1.AWSResourceReference{
 					{
-						Filters: []machinev1.Filter{},
+						Filters: []machinev1beta1.Filter{},
 					},
 				},
 			),
@@ -537,9 +541,9 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name: "No security group",
 			providerConfig: stubPCSecurityGroups(
-				[]machinev1.AWSResourceReference{
+				[]machinev1beta1.AWSResourceReference{
 					{
-						Filters: []machinev1.Filter{},
+						Filters: []machinev1beta1.Filter{},
 					},
 				},
 			),
@@ -574,8 +578,8 @@ func TestLaunchInstance(t *testing.T) {
 		},
 		{
 			name: "Subnet with filters",
-			providerConfig: stubPCSubnet(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{},
+			providerConfig: stubPCSubnet(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{},
 			}),
 			subnetOutput: &ec2.DescribeSubnetsOutput{
 				Subnets: []*ec2.Subnet{
@@ -624,22 +628,22 @@ func TestLaunchInstance(t *testing.T) {
 		},
 		{
 			name: "Subnet with filters with error",
-			providerConfig: stubPCSubnet(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{},
+			providerConfig: stubPCSubnet(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{},
 			}),
 			subnetErr: fmt.Errorf("error"),
 		},
 		{
 			name: "Subnet with availability zone with error",
-			providerConfig: stubPCSubnet(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{},
+			providerConfig: stubPCSubnet(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{},
 			}),
 			azErr: fmt.Errorf("error"),
 		},
 		{
 			name: "AMI with filters",
-			providerConfig: stubPCAMI(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{
+			providerConfig: stubPCAMI(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{
 					{
 						Name:   "foo",
 						Values: []string{"bar"},
@@ -691,15 +695,15 @@ func TestLaunchInstance(t *testing.T) {
 		},
 		{
 			name: "AMI with filters with error",
-			providerConfig: stubPCAMI(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{},
+			providerConfig: stubPCAMI(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{},
 			}),
 			imageErr: fmt.Errorf("error"),
 		},
 		{
 			name: "AMI with filters with no image",
-			providerConfig: stubPCAMI(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{
+			providerConfig: stubPCAMI(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{
 					{
 						Name:   "image_stage",
 						Values: []string{"base"},
@@ -747,8 +751,8 @@ func TestLaunchInstance(t *testing.T) {
 		},
 		{
 			name: "AMI with filters with two images",
-			providerConfig: stubPCAMI(machinev1.AWSResourceReference{
-				Filters: []machinev1.Filter{
+			providerConfig: stubPCAMI(machinev1beta1.AWSResourceReference{
+				Filters: []machinev1beta1.Filter{
 					{
 						Name:   "image_stage",
 						Values: []string{"base"},
@@ -804,7 +808,7 @@ func TestLaunchInstance(t *testing.T) {
 		},
 		{
 			name:           "AMI not specified",
-			providerConfig: stubPCAMI(machinev1.AWSResourceReference{}),
+			providerConfig: stubPCAMI(machinev1beta1.AWSResourceReference{}),
 		},
 		{
 			name:           "Dedicated instance tenancy",
@@ -965,6 +969,114 @@ func TestLaunchInstance(t *testing.T) {
 				UserData: aws.String(""),
 			},
 		},
+		{
+			name:            "With a Placement Group Name which does not exist",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNameConfig(),
+			succeeds:        false,
+			infra:           infra,
+		},
+		{
+			name:            "With a Placement Group Name which does exist",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNameConfig(),
+			succeeds:        true,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSClusterPlacementGroupType),
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName: aws.String(stubPlacementGroupName),
+				},
+				UserData: aws.String(""),
+			},
+		},
+		{
+			name:            "With a Placement PartionNumber with a non Partition placement group",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNumberConfig(1),
+			succeeds:        false,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSClusterPlacementGroupType),
+			},
+		},
+		{
+			name:            "With a Placement PartionNumber with a Partition placement group",
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			providerConfig:  stubPlacementGroupNumberConfig(1),
+			succeeds:        true,
+			infra:           infra,
+			objects: []runtime.Object{
+				stubPlacementGroup(machinev1.AWSPartitionPlacementGroupType),
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagListWithInfraObject,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagListWithInfraObject,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups: []*string{
+							aws.String("sg-00868b02fbe29de17"),
+							aws.String("sg-0a4658991dc5eb40a"),
+							aws.String("sg-009a70e28fa4ba84e"),
+							aws.String("sg-07323d56fb932c84c"),
+							aws.String("sg-08b1ffd32874d59a2"),
+						},
+					},
+				},
+				Placement: &ec2.Placement{
+					GroupName:       aws.String(stubPlacementGroupName),
+					PartitionNumber: aws.Int64(1),
+				},
+				UserData: aws.String(""),
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -977,7 +1089,9 @@ func TestLaunchInstance(t *testing.T) {
 			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
 			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
 
-			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, tc.infra)
+			fakeClient := fake.NewFakeClient(tc.objects...)
+
+			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
 			t.Log(launchErr)
 			if launchErr == nil {
 				if !tc.succeeds {
@@ -1013,7 +1127,7 @@ func TestSortInstances(t *testing.T) {
 func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 	testCases := []struct {
 		name              string
-		spotMarketOptions *machinev1.SpotMarketOptions
+		spotMarketOptions *machinev1beta1.SpotMarketOptions
 		expectedRequest   *ec2.InstanceMarketOptionsRequest
 	}{
 		{
@@ -1023,7 +1137,7 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 		},
 		{
 			name:              "with an empty Spot options specified",
-			spotMarketOptions: &machinev1.SpotMarketOptions{},
+			spotMarketOptions: &machinev1beta1.SpotMarketOptions{},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
 				MarketType: aws.String(ec2.MarketTypeSpot),
 				SpotOptions: &ec2.SpotMarketOptions{
@@ -1034,7 +1148,7 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 		},
 		{
 			name: "with an empty MaxPrice specified",
-			spotMarketOptions: &machinev1.SpotMarketOptions{
+			spotMarketOptions: &machinev1beta1.SpotMarketOptions{
 				MaxPrice: aws.String(""),
 			},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
@@ -1047,7 +1161,7 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 		},
 		{
 			name: "with a valid MaxPrice specified",
-			spotMarketOptions: &machinev1.SpotMarketOptions{
+			spotMarketOptions: &machinev1beta1.SpotMarketOptions{
 				MaxPrice: aws.String("0.01"),
 			},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
@@ -1063,7 +1177,7 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			providerConfig := &machinev1.AWSMachineProviderConfig{
+			providerConfig := &machinev1beta1.AWSMachineProviderConfig{
 				SpotMarketOptions: tc.spotMarketOptions,
 			}
 

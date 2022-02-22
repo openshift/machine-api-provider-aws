@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	gtypes "github.com/onsi/gomega/types"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -79,7 +79,7 @@ var _ = Describe("MachineSetReconciler", func() {
 		Expect(c.Create(ctx, machineSet)).To(Succeed())
 
 		Eventually(func() map[string]string {
-			m := &machinev1.MachineSet{}
+			m := &machinev1beta1.MachineSet{}
 			key := client.ObjectKey{Namespace: machineSet.Namespace, Name: machineSet.Name}
 			err := c.Get(ctx, key, m)
 			if err != nil {
@@ -160,7 +160,7 @@ var _ = Describe("MachineSetReconciler", func() {
 })
 
 func deleteMachineSets(c client.Client, namespaceName string) error {
-	machineSets := &machinev1.MachineSetList{}
+	machineSets := &machinev1beta1.MachineSetList{}
 	err := c.List(ctx, machineSets, client.InNamespace(namespaceName))
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func deleteMachineSets(c client.Client, namespaceName string) error {
 	}
 
 	Eventually(func() error {
-		machineSets := &machinev1.MachineSetList{}
+		machineSets := &machinev1beta1.MachineSetList{}
 		err := c.List(ctx, machineSets)
 		if err != nil {
 			return err
@@ -276,14 +276,14 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-func newTestMachineSet(namespace string, instanceType string, existingAnnotations map[string]string) (*machinev1.MachineSet, error) {
+func newTestMachineSet(namespace string, instanceType string, existingAnnotations map[string]string) (*machinev1beta1.MachineSet, error) {
 	// Copy anntotations map so we don't modify the input
 	annotations := make(map[string]string)
 	for k, v := range existingAnnotations {
 		annotations[k] = v
 	}
 
-	machineProviderSpec := &machinev1.AWSMachineProviderConfig{
+	machineProviderSpec := &machinev1beta1.AWSMachineProviderConfig{
 		InstanceType: instanceType,
 	}
 	providerSpec, err := providerSpecFromMachine(machineProviderSpec)
@@ -292,16 +292,16 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 	}
 
 	replicas := int32(1)
-	return &machinev1.MachineSet{
+	return &machinev1beta1.MachineSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations:  annotations,
 			GenerateName: "test-machineset-",
 			Namespace:    namespace,
 		},
-		Spec: machinev1.MachineSetSpec{
+		Spec: machinev1beta1.MachineSetSpec{
 			Replicas: &replicas,
-			Template: machinev1.MachineTemplateSpec{
-				Spec: machinev1.MachineSpec{
+			Template: machinev1beta1.MachineTemplateSpec{
+				Spec: machinev1beta1.MachineSpec{
 					ProviderSpec: providerSpec,
 				},
 			},
@@ -309,12 +309,12 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 	}, nil
 }
 
-func providerSpecFromMachine(in *machinev1.AWSMachineProviderConfig) (machinev1.ProviderSpec, error) {
+func providerSpecFromMachine(in *machinev1beta1.AWSMachineProviderConfig) (machinev1beta1.ProviderSpec, error) {
 	bytes, err := json.Marshal(in)
 	if err != nil {
-		return machinev1.ProviderSpec{}, err
+		return machinev1beta1.ProviderSpec{}, err
 	}
-	return machinev1.ProviderSpec{
+	return machinev1beta1.ProviderSpec{
 		Value: &runtime.RawExtension{Raw: bytes},
 	}, nil
 }

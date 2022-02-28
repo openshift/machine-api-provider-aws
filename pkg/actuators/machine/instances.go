@@ -365,14 +365,17 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		ImageId:      amiID,
 		InstanceType: aws.String(machineProviderConfig.InstanceType),
 		// Only a single instance of the AWS instance allowed
-		MinCount:              aws.Int64(1),
-		MaxCount:              aws.Int64(1),
-		KeyName:               machineProviderConfig.KeyName,
-		IamInstanceProfile:    iamInstanceProfile,
-		TagSpecifications:     []*ec2.TagSpecification{tagInstance, tagVolume},
-		NetworkInterfaces:     networkInterfaces,
-		UserData:              &userDataEnc,
-		Placement:             placement,
+		MinCount:           aws.Int64(1),
+		MaxCount:           aws.Int64(1),
+		KeyName:            machineProviderConfig.KeyName,
+		IamInstanceProfile: iamInstanceProfile,
+		TagSpecifications:  []*ec2.TagSpecification{tagInstance, tagVolume},
+		NetworkInterfaces:  networkInterfaces,
+		UserData:           &userDataEnc,
+		Placement:          placement,
+		MetadataOptions: &ec2.InstanceMetadataOptionsRequest{
+			HttpTokens: aws.String(ec2.LaunchTemplateHttpTokensStateRequired),
+		},
 		InstanceMarketOptions: getInstanceMarketOptionsRequest(machineProviderConfig),
 	}
 

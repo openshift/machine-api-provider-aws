@@ -10,7 +10,8 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	v1 "k8s.io/api/core/v1"
@@ -24,7 +25,8 @@ import (
 
 func init() {
 	// Add types to scheme
-	machinev1.AddToScheme(scheme.Scheme)
+	machinev1beta1.AddToScheme(scheme.Scheme)
+	machinev1.Install(scheme.Scheme)
 	configv1.AddToScheme(scheme.Scheme)
 }
 
@@ -47,7 +49,7 @@ func TestMachineEvents(t *testing.T) {
 	cases := []struct {
 		name                string
 		error               string
-		operation           func(actuator *Actuator, machine *machinev1.Machine)
+		operation           func(actuator *Actuator, machine *machinev1beta1.Machine)
 		event               string
 		awsError            bool
 		invalidMachineScope bool
@@ -55,7 +57,7 @@ func TestMachineEvents(t *testing.T) {
 	}{
 		{
 			name: "Create machine event failed on invalid machine scope",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Create(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: failed to create scope for machine: failed to create aws client: AWS client error",
@@ -64,7 +66,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Create machine event failed, reconciler's create failed",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Create(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: reconciler failed to Create machine: unable to remove stopped machines: error getting stopped instances: AWS error",
@@ -73,7 +75,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Create machine event succeed",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Create(context.TODO(), machine)
 			},
 			event:               "Created Machine aws-actuator-testing-machine",
@@ -82,7 +84,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Update machine event failed on invalid machine scope",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Update(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: failed to create scope for machine: failed to create aws client: AWS client error",
@@ -91,7 +93,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Update machine event failed, reconciler's update failed",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Update(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: reconciler failed to Update machine: AWS error",
@@ -100,7 +102,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Update machine event succeed and only one event is created",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Update(context.TODO(), machine)
 				actuator.Update(context.TODO(), machine)
 			},
@@ -109,7 +111,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Delete machine event failed on invalid machine scope",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Delete(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: failed to create scope for machine: failed to create aws client: AWS client error",
@@ -118,7 +120,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Delete machine event failed, reconciler's delete failed",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Delete(context.TODO(), machine)
 			},
 			event:               "aws-actuator-testing-machine: reconciler failed to Delete machine: AWS error",
@@ -127,7 +129,7 @@ func TestMachineEvents(t *testing.T) {
 		},
 		{
 			name: "Delete machine event succeed",
-			operation: func(actuator *Actuator, machine *machinev1.Machine) {
+			operation: func(actuator *Actuator, machine *machinev1beta1.Machine) {
 				actuator.Delete(context.TODO(), machine)
 			},
 			setInstanceID:       true, // This implies the machine was already created

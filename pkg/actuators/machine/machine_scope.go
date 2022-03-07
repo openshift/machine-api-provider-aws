@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machineapierros "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -30,7 +30,7 @@ type machineScopeParams struct {
 	// api server controller runtime client
 	client runtimeclient.Client
 	// machine resource
-	machine *machinev1.Machine
+	machine *machinev1beta1.Machine
 	// api server controller runtime client for the openshift-config-managed namespace
 	configManagedClient runtimeclient.Client
 	eventRecorder       record.EventRecorder
@@ -44,7 +44,7 @@ type machineScope struct {
 	// api server controller runtime client
 	client runtimeclient.Client
 	// machine resource
-	machine            *machinev1.Machine
+	machine            *machinev1beta1.Machine
 	machineToBePatched runtimeclient.Patch
 	originalStatus     machinev1.MachineStatus
 	providerSpec       *machinev1.AWSMachineProviderConfig
@@ -164,7 +164,7 @@ func (s *machineScope) getUserData() ([]byte, error) {
 	return userData, nil
 }
 
-func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition machinev1.AWSMachineProviderCondition) error {
+func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition machinev1beta1.AWSMachineProviderCondition) error {
 	klog.Infof("%s: Updating status", s.machine.Name)
 
 	networkAddresses := []corev1.NodeAddress{}

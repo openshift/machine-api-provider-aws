@@ -9,7 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -23,11 +24,12 @@ const (
 	awsCredentialsSecretName = "aws-credentials-secret"
 	userDataSecretName       = "aws-actuator-user-data-secret"
 
-	keyName         = "aws-actuator-key-name"
-	stubClusterID   = "aws-actuator-cluster"
-	stubMachineName = "aws-actuator-testing-machine"
-	stubAMIID       = "ami-a9acbbd6"
-	stubInstanceID  = "i-02fcb933c5da7085c"
+	keyName                = "aws-actuator-key-name"
+	stubClusterID          = "aws-actuator-cluster"
+	stubMachineName        = "aws-actuator-testing-machine"
+	stubAMIID              = "ami-a9acbbd6"
+	stubInstanceID         = "i-02fcb933c5da7085c"
+	stubPlacementGroupName = "placement-group-1"
 )
 
 const userDataBlob = `#cloud-config
@@ -41,35 +43,35 @@ runcmd:
 - [ cat, /root/node_bootstrap/node_settings.yaml]
 `
 
-func stubProviderConfig() *machinev1.AWSMachineProviderConfig {
-	return &machinev1.AWSMachineProviderConfig{
-		AMI: machinev1.AWSResourceReference{
+func stubProviderConfig() *machinev1beta1.AWSMachineProviderConfig {
+	return &machinev1beta1.AWSMachineProviderConfig{
+		AMI: machinev1beta1.AWSResourceReference{
 			ID: aws.String(stubAMIID),
 		},
 		CredentialsSecret: &corev1.LocalObjectReference{
 			Name: awsCredentialsSecretName,
 		},
 		InstanceType: "m4.xlarge",
-		Placement: machinev1.Placement{
+		Placement: machinev1beta1.Placement{
 			Region:           region,
 			AvailabilityZone: defaultAvailabilityZone,
 		},
-		Subnet: machinev1.AWSResourceReference{
+		Subnet: machinev1beta1.AWSResourceReference{
 			ID: aws.String("subnet-0e56b13a64ff8a941"),
 		},
-		IAMInstanceProfile: &machinev1.AWSResourceReference{
+		IAMInstanceProfile: &machinev1beta1.AWSResourceReference{
 			ID: aws.String("openshift_master_launch_instances"),
 		},
 		KeyName: aws.String(keyName),
 		UserDataSecret: &corev1.LocalObjectReference{
 			Name: userDataSecretName,
 		},
-		Tags: []machinev1.TagSpecification{
+		Tags: []machinev1beta1.TagSpecification{
 			{Name: "openshift-node-group-config", Value: "node-config-master"},
 			{Name: "host-type", Value: "master"},
 			{Name: "sub-host-type", Value: "default"},
 		},
-		SecurityGroups: []machinev1.AWSResourceReference{
+		SecurityGroups: []machinev1beta1.AWSResourceReference{
 			{ID: aws.String("sg-00868b02fbe29de17")},
 			{ID: aws.String("sg-0a4658991dc5eb40a")},
 			{ID: aws.String("sg-009a70e28fa4ba84e")},
@@ -77,28 +79,28 @@ func stubProviderConfig() *machinev1.AWSMachineProviderConfig {
 			{ID: aws.String("sg-08b1ffd32874d59a2")},
 		},
 		PublicIP: aws.Bool(true),
-		LoadBalancers: []machinev1.LoadBalancerReference{
+		LoadBalancers: []machinev1beta1.LoadBalancerReference{
 			{
 				Name: "cluster-con",
-				Type: machinev1.ClassicLoadBalancerType,
+				Type: machinev1beta1.ClassicLoadBalancerType,
 			},
 			{
 				Name: "cluster-ext",
-				Type: machinev1.ClassicLoadBalancerType,
+				Type: machinev1beta1.ClassicLoadBalancerType,
 			},
 			{
 				Name: "cluster-int",
-				Type: machinev1.ClassicLoadBalancerType,
+				Type: machinev1beta1.ClassicLoadBalancerType,
 			},
 			{
 				Name: "cluster-net-lb",
-				Type: machinev1.NetworkLoadBalancerType,
+				Type: machinev1beta1.NetworkLoadBalancerType,
 			},
 		},
 	}
 }
 
-func stubMachine() (*machinev1.Machine, error) {
+func stubMachine() (*machinev1beta1.Machine, error) {
 	machinePc := stubProviderConfig()
 
 	providerSpec, err := RawExtensionFromProviderSpec(machinePc)
@@ -106,12 +108,12 @@ func stubMachine() (*machinev1.Machine, error) {
 		return nil, fmt.Errorf("codec.EncodeProviderSpec failed: %v", err)
 	}
 
-	machine := &machinev1.Machine{
+	machine := &machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      stubMachineName,
 			Namespace: defaultNamespace,
 			Labels: map[string]string{
-				machinev1.MachineClusterIDLabel: stubClusterID,
+				machinev1beta1.MachineClusterIDLabel: stubClusterID,
 			},
 			Annotations: map[string]string{
 				// skip node draining since it's not mocked
@@ -119,14 +121,14 @@ func stubMachine() (*machinev1.Machine, error) {
 			},
 		},
 
-		Spec: machinev1.MachineSpec{
-			ObjectMeta: machinev1.ObjectMeta{
+		Spec: machinev1beta1.MachineSpec{
+			ObjectMeta: machinev1beta1.ObjectMeta{
 				Labels: map[string]string{
 					"node-role.kubernetes.io/master": "",
 					"node-role.kubernetes.io/infra":  "",
 				},
 			},
-			ProviderSpec: machinev1.ProviderSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: providerSpec,
 			},
 		},
@@ -203,34 +205,76 @@ func stubInstance(imageID, instanceID string, setIP bool) *ec2.Instance {
 	}
 }
 
-func stubPCSecurityGroups(groups []machinev1.AWSResourceReference) *machinev1.AWSMachineProviderConfig {
+func stubPCSecurityGroups(groups []machinev1beta1.AWSResourceReference) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.SecurityGroups = groups
 	return pc
 }
 
-func stubPCSubnet(subnet machinev1.AWSResourceReference) *machinev1.AWSMachineProviderConfig {
+func stubPCSubnet(subnet machinev1beta1.AWSResourceReference) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Subnet = subnet
 	return pc
 }
 
-func stubPCAMI(ami machinev1.AWSResourceReference) *machinev1.AWSMachineProviderConfig {
+func stubPCAMI(ami machinev1beta1.AWSResourceReference) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.AMI = ami
 	return pc
 }
 
-func stubDedicatedInstanceTenancy() *machinev1.AWSMachineProviderConfig {
+func stubDedicatedInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
-	pc.Placement.Tenancy = machinev1.DedicatedTenancy
+	pc.Placement.Tenancy = machinev1beta1.DedicatedTenancy
 	return pc
 }
 
-func stubInvalidInstanceTenancy() *machinev1.AWSMachineProviderConfig {
+func stubEFANetworkInterfaceType() *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.NetworkInterfaceType = machinev1beta1.AWSEFANetworkInterfaceType
+	return pc
+}
+
+func stubInvalidNetworkInterfaceType() *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.NetworkInterfaceType = "invalid"
+	return pc
+}
+
+func stubInvalidInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Placement.Tenancy = "invalid"
 	return pc
+}
+
+func stubPlacementGroupNameConfig() *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.Placement.Group.Name = stubPlacementGroupName
+	return pc
+}
+
+func stubPlacementGroupNumberConfig(partitionNumber int32) *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.Placement.Group.Name = stubPlacementGroupName
+	pc.Placement.PartitionNumber = partitionNumber
+	return pc
+}
+
+func stubPlacementGroup(groupType machinev1.AWSPlacementGroupType) *machinev1.AWSPlacementGroup {
+	return &machinev1.AWSPlacementGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      stubPlacementGroupName,
+			Namespace: defaultNamespace,
+		},
+		Spec: machinev1.AWSPlacementGroupSpec{
+			ManagementSpec: machinev1.AWSPlacementGroupManagementSpec{
+				ManagementState: machinev1.ManagedManagementState,
+				Managed: &machinev1.ManagedAWSPlacementGroup{
+					GroupType: groupType,
+				},
+			},
+		},
+	}
 }
 
 func stubDescribeLoadBalancersOutput() *elbv2.DescribeLoadBalancersOutput {

@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	corev1 "k8s.io/api/core/v1"
@@ -26,19 +26,19 @@ import (
 
 const testNamespace = "aws-test"
 
-func machineWithSpec(spec *machinev1.AWSMachineProviderConfig) *machinev1.Machine {
+func machineWithSpec(spec *machinev1beta1.AWSMachineProviderConfig) *machinev1beta1.Machine {
 	rawSpec, err := RawExtensionFromProviderSpec(spec)
 	if err != nil {
 		panic("Failed to encode raw extension from provider spec")
 	}
 
-	return &machinev1.Machine{
+	return &machinev1beta1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "aws-test",
 			Namespace: testNamespace,
 		},
-		Spec: machinev1.MachineSpec{
-			ProviderSpec: machinev1.ProviderSpec{
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
 				Value: rawSpec,
 			},
 		},
@@ -48,7 +48,7 @@ func machineWithSpec(spec *machinev1.AWSMachineProviderConfig) *machinev1.Machin
 func TestGetUserData(t *testing.T) {
 	userDataSecretName := "aws-ignition"
 
-	defaultProviderSpec := &machinev1.AWSMachineProviderConfig{
+	defaultProviderSpec := &machinev1beta1.AWSMachineProviderConfig{
 		UserDataSecret: &corev1.LocalObjectReference{
 			Name: userDataSecretName,
 		},
@@ -57,7 +57,7 @@ func TestGetUserData(t *testing.T) {
 	testCases := []struct {
 		testCase         string
 		userDataSecret   *corev1.Secret
-		providerSpec     *machinev1.AWSMachineProviderConfig
+		providerSpec     *machinev1beta1.AWSMachineProviderConfig
 		expectedUserdata []byte
 		expectError      bool
 	}{
@@ -106,7 +106,7 @@ func TestGetUserData(t *testing.T) {
 		{
 			testCase:         "no user-data in provider spec",
 			userDataSecret:   nil,
-			providerSpec:     &machinev1.AWSMachineProviderConfig{},
+			providerSpec:     &machinev1beta1.AWSMachineProviderConfig{},
 			expectError:      false,
 			expectedUserdata: nil,
 		},
@@ -176,19 +176,19 @@ func TestPatchMachine(t *testing.T) {
 
 	failedPhase := "Failed"
 
-	providerStatus := &machinev1.AWSMachineProviderStatus{}
+	providerStatus := &machinev1beta1.AWSMachineProviderStatus{}
 
 	testCases := []struct {
 		name   string
-		mutate func(*machinev1.Machine)
-		expect func(*machinev1.Machine) error
+		mutate func(*machinev1beta1.Machine)
+		expect func(*machinev1beta1.Machine) error
 	}{
 		{
 			name: "Test changing labels",
-			mutate: func(m *machinev1.Machine) {
+			mutate: func(m *machinev1beta1.Machine) {
 				m.ObjectMeta.Labels["testlabel"] = "test"
 			},
-			expect: func(m *machinev1.Machine) error {
+			expect: func(m *machinev1beta1.Machine) error {
 				if m.ObjectMeta.Labels["testlabel"] != "test" {
 					return fmt.Errorf("label \"testlabel\" %q not equal expected \"test\"", m.ObjectMeta.Labels["test"])
 				}
@@ -197,10 +197,10 @@ func TestPatchMachine(t *testing.T) {
 		},
 		{
 			name: "Test setting phase",
-			mutate: func(m *machinev1.Machine) {
+			mutate: func(m *machinev1beta1.Machine) {
 				m.Status.Phase = &failedPhase
 			},
-			expect: func(m *machinev1.Machine) error {
+			expect: func(m *machinev1beta1.Machine) error {
 				if m.Status.Phase != nil && *m.Status.Phase == failedPhase {
 					return nil
 				}
@@ -209,13 +209,13 @@ func TestPatchMachine(t *testing.T) {
 		},
 		{
 			name: "Test setting provider status",
-			mutate: func(m *machinev1.Machine) {
+			mutate: func(m *machinev1beta1.Machine) {
 				instanceID := "123"
 				instanceState := "running"
 				providerStatus.InstanceID = &instanceID
 				providerStatus.InstanceState = &instanceState
 			},
-			expect: func(m *machinev1.Machine) error {
+			expect: func(m *machinev1beta1.Machine) error {
 				providerStatus, err := ProviderStatusFromRawExtension(m.Status.ProviderStatus)
 				if err != nil {
 					return fmt.Errorf("unable to get provider status: %v", err)

@@ -256,6 +256,7 @@ github.com/onsi/gomega/types
 # github.com/openshift/api v0.0.0-20211217221424-8779abfbd571 => github.com/josefkarasek/api-1 v0.0.0-20220201081630-94b64b4597dd
 ## explicit
 github.com/openshift/api/config/v1
+github.com/openshift/api/machine/v1
 github.com/openshift/api/machine/v1beta1
 # github.com/openshift/client-go v0.0.0-20211209144617-7385dd6338e3
 ## explicit

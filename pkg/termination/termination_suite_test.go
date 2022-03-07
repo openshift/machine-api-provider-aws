@@ -21,7 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	machinev1 "github.com/openshift/api/machine/v1beta1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -59,7 +59,7 @@ var _ = BeforeSuite(func() {
 	// that would initialise the scheme themselves.
 	scheme := runtime.NewScheme()
 	kubernetesscheme.AddToScheme(scheme)
-	machinev1.AddToScheme(scheme)
+	machinev1beta1.AddToScheme(scheme)
 
 	var err error
 	cfg, err = testEnv.Start()

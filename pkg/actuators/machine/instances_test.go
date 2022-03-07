@@ -1008,7 +1008,7 @@ func TestCorrectExistingTags(t *testing.T) {
 	testCases := []struct {
 		name               string
 		tags               []*ec2.Tag
-		userTags           map[string]string
+		userTags           map[string]interface{}
 		expectedCreateTags bool
 	}{
 		{
@@ -1038,7 +1038,9 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags:           map[string]string{"UserDefinedTag2": "UserDefinedTagValue2"},
+			userTags: map[string]interface{}{
+				"upd": map[string]string{"UserDefinedTag2": "UserDefinedTagValue2"},
+			},
 		},
 		{
 			name: "Valid Tags and Update",
@@ -1057,7 +1059,51 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags:           map[string]string{"UserDefinedTag1": "ModifiedValue"},
+			userTags: map[string]interface{}{
+				"upd": map[string]string{"UserDefinedTag1": "ModifiedValue"},
+			},
+		},
+		{
+			name: "Valid Tags and Update, Delete",
+			tags: []*ec2.Tag{
+				{
+					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+					Value: aws.String("owned"),
+				},
+				{
+					Key:   aws.String("Name"),
+					Value: aws.String(machine.Name),
+				},
+			},
+			expectedCreateTags: true,
+			userTags: map[string]interface{}{
+				"upd": map[string]string{
+					"UserDefinedTag2": "ModifiedValue",
+					"UserDefinedTag3": "UserDefinedTagValue3",
+				},
+				"del": map[string]string{"UserDefinedTag1": ""},
+			},
+		},
+		{
+			name: "Valid Tags and Delete",
+			tags: []*ec2.Tag{
+				{
+					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+					Value: aws.String("owned"),
+				},
+				{
+					Key:   aws.String("Name"),
+					Value: aws.String(machine.Name),
+				},
+				{
+					Key:   aws.String("UserDefinedTag1"),
+					Value: aws.String("UserDefinedTagValue1"),
+				},
+			},
+			expectedCreateTags: true,
+			userTags: map[string]interface{}{
+				"del": map[string]string{"UserDefinedTag3": ""},
+			},
 		},
 		{
 			name: "Invalid Name Tag Correct Cluster",

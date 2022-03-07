@@ -105,6 +105,10 @@ func (c *awsClient) CreateTags(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutpu
 	return &ec2.CreateTagsOutput{}, nil
 }
 
+func (c *awsClient) DeleteTags(input *ec2.DeleteTagsInput) (*ec2.DeleteTagsOutput, error) {
+	return &ec2.DeleteTagsOutput{}, nil
+}
+
 func (c *awsClient) RegisterInstancesWithLoadBalancer(input *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
 	// Feel free to extend the returned values
 	return &elb.RegisterInstancesWithLoadBalancerOutput{}, nil

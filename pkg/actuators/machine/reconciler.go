@@ -248,9 +248,12 @@ func (r *Reconciler) update() error {
 	}
 
 	if err = correctExistingTags(r.machine, newestInstance, r.awsClient, tagList); err != nil {
-		return fmt.Errorf("failed to correct existing instance tags: %w", err)
+		r.eventRecorder.Eventf(r.machine, corev1.EventTypeWarning, "UpdateAWSTags",
+			"Failed to update tags of %s ec2 instance", *newestInstance.InstanceId)
+	} else {
+		r.eventRecorder.Eventf(r.machine, corev1.EventTypeNormal, "UpdateAWSTags",
+			"Successfully updated tags of %s ec2 instance", *newestInstance.InstanceId)
 	}
-
 	klog.Infof("Updated machine %s", r.machine.Name)
 
 	r.machineScope.setProviderStatus(newestInstance, conditionSuccess())
@@ -258,7 +261,7 @@ func (r *Reconciler) update() error {
 	return r.requeueIfInstancePending(newestInstance)
 }
 
-func (r *Reconciler) getTagsFromInfrastructure() (map[string]string, error) {
+func (r *Reconciler) getTagsFromInfrastructure() (map[string]interface{}, error) {
 	infra := &configv1.Infrastructure{}
 	infraName := client.ObjectKey{Name: awsclient.GlobalInfrastuctureName}
 

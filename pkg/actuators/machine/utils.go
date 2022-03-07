@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -34,6 +35,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 )
+
+// tagKeyRegex is used to check that the keys and values of a tag contain only valid characters.
+var tagKeyRegex = regexp.MustCompile(`^[0-9A-Za-z_.:/=+-@]{1,128}$`)
+
+// tagValRegex is used to check that the keys and values of a tag contain only valid characters.
+var tagValRegex = regexp.MustCompile(`^[0-9A-Za-z_.:/=+-@]{0,256}$`)
+
+// kubernetesNamespaceRegex is used to check that a tag key is not in the kubernetes.io namespace.
+var kubernetesNamespaceRegex = regexp.MustCompile(`^([^/]*\.)?kubernetes.io/`)
+
+// openshiftNamespaceRegex is used to check that a tag key is not in the openshift.io namespace.
+var openshiftNamespaceRegex = regexp.MustCompile(`^([^/]*\.)?openshift.io/`)
 
 // upstreamMachineClusterIDLabel is the label that a machine must have to identify the cluster to which it belongs
 const upstreamMachineClusterIDLabel = "sigs.k8s.io/cluster-api-cluster"
@@ -136,7 +149,7 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]string) error {
+func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]interface{}) error {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
 	if instance == nil || instance.InstanceId == nil {
 		return fmt.Errorf("unexpected nil found in instance: %v", instance)
@@ -147,6 +160,7 @@ func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, cli
 	}
 	nameTagOk := false
 	clusterTagOk := false
+	updTags, _ := tags["upd"].(map[string]string)
 	for _, tag := range instance.Tags {
 		if tag.Key != nil && tag.Value != nil {
 			if *tag.Key == "Name" && *tag.Value == machine.Name {
@@ -155,14 +169,14 @@ func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, cli
 			if *tag.Key == "kubernetes.io/cluster/"+clusterID && *tag.Value == "owned" {
 				clusterTagOk = true
 			}
-			if tagValue, present := tags[*tag.Key]; present && *tag.Value == tagValue {
-				delete(tags, *tag.Key)
+			if tagValue, present := updTags[*tag.Key]; present && *tag.Value == tagValue {
+				delete(updTags, *tag.Key)
 			}
 		}
 	}
 
 	tagsToAdd := []*ec2.Tag{}
-	for key, value := range tags {
+	for key, value := range updTags {
 		tagsToAdd = append(tagsToAdd, &ec2.Tag{
 			Key:   aws.String(key),
 			Value: aws.String(value),
@@ -191,6 +205,28 @@ func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, cli
 		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToAdd)
 		_, err := client.CreateTags(input)
+		return err
+	}
+
+	delTags, _ := tags["del"].(map[string]string)
+	tagsToDel := []*ec2.Tag{}
+	for key, value := range delTags {
+		tagsToDel = append(tagsToDel, &ec2.Tag{
+			Key:   aws.String(key),
+			Value: aws.String(value),
+		})
+	}
+
+	if len(tagsToDel) != 0 {
+		input := &ec2.DeleteTagsInput{
+			Resources: []*string{
+				aws.String(*instance.InstanceId),
+			},
+			Tags: tagsToDel,
+		}
+		klog.Infof("deleting Tags for machine: %v; instanceID: %v, tags: %+v",
+			machine.Name, *instance.InstanceId, tagsToDel)
+		_, err := client.DeleteTags(input)
 		return err
 	}
 
@@ -486,22 +522,58 @@ func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machin
 	return providerStatus, nil
 }
 
-func fetchInfraResourceTags(infra *configv1.Infrastructure) map[string]string {
+func fetchInfraResourceTags(infra *configv1.Infrastructure) map[string]interface{} {
 	// Should consider the spec over status if spec contains the user tags
-
 	mergedTags := make(map[string]string)
+	deleteTags := make(map[string]string)
+	if infra != nil && infra.Spec.PlatformSpec.AWS != nil {
+		for _, tag := range infra.Spec.PlatformSpec.AWS.ResourceTags {
+			if err := validateUserTag(tag.Key, tag.Value); err != nil {
+				klog.Warningf("validation failed for tag(%s:%s): %v", tag.Key, tag.Value, err)
+				continue
+			}
+			if tag.Value == "" {
+				deleteTags[tag.Key] = ""
+				continue
+			}
+			mergedTags[tag.Key] = tag.Value
+		}
+	}
+
 	if infra != nil && infra.Status.PlatformStatus != nil &&
 		infra.Status.PlatformStatus.AWS != nil {
-		for _, value := range infra.Status.PlatformStatus.AWS.ResourceTags {
-			mergedTags[value.Key] = value.Value
+		for _, tag := range infra.Status.PlatformStatus.AWS.ResourceTags {
+			value, ok := mergedTags[tag.Key]
+			if !ok {
+				klog.Infof("tag %s exists only in infra.Status, considering for update", tag.Key)
+				mergedTags[tag.Key] = value
+			} else if value != tag.Value {
+				klog.Warningf("value for tag %s differs in infra.Status(%s) and infra.Spec(%s), value in infra.Spec considered", tag.Key, tag.Value, value)
+			}
 		}
 	}
 
-	if infra != nil && infra.Spec.PlatformSpec.AWS != nil {
-		for _, value := range infra.Spec.PlatformSpec.AWS.ResourceTags {
-			mergedTags[value.Key] = value.Value
-		}
-	}
+	tagList := make(map[string]interface{})
+	tagList["upd"] = mergedTags
+	tagList["del"] = deleteTags
+	return tagList
+}
 
-	return mergedTags
+func validateUserTag(key, value string) error {
+	if !tagKeyRegex.MatchString(key) {
+		return fmt.Errorf("key has invalid characters or length")
+	}
+	if strings.EqualFold(key, "Name") {
+		return fmt.Errorf("key cannot be customized by user")
+	}
+	if !tagValRegex.MatchString(value) {
+		return fmt.Errorf("value has invalid characters or length")
+	}
+	if kubernetesNamespaceRegex.MatchString(key) {
+		return fmt.Errorf("key is in the kubernetes.io namespace")
+	}
+	if openshiftNamespaceRegex.MatchString(key) {
+		return fmt.Errorf("key is in the openshift.io namespace")
+	}
+	return nil
 }

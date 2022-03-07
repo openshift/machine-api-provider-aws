@@ -191,7 +191,7 @@ func TestFetchInfraResourceTags(t *testing.T) {
 	testCases := []struct {
 		testcase     string
 		instance     *configv1.Infrastructure
-		expectedTags map[string]string
+		expectedTags map[string]interface{}
 	}{
 		{
 			testcase: "UserTags_in_Spec",
@@ -203,13 +203,13 @@ func TestFetchInfraResourceTags(t *testing.T) {
 					PlatformSpec: configv1.PlatformSpec{
 						Type: "AWS",
 						AWS: &configv1.AWSPlatformSpec{
-							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "CFE"}, {Key: "tester", Value: "member1"}},
+							ResourceTags: []configv1.AWSResourceTag{{Key: "team", Value: "CFE"}, {Key: "tester", Value: "member1"}, {Key: "region", Value: ""}},
 						},
 					},
 				},
 				Status: configv1.InfrastructureStatus{},
 			},
-			expectedTags: map[string]string{"name": "CFE", "tester": "member1"},
+			expectedTags: map[string]interface{}{"upd": map[string]string{"team": "CFE", "tester": "member1"}, "del": map[string]string{"region": ""}},
 		},
 		{
 			testcase: "UserTags_in_Status",
@@ -221,12 +221,12 @@ func TestFetchInfraResourceTags(t *testing.T) {
 					PlatformStatus: &configv1.PlatformStatus{
 						Type: "",
 						AWS: &configv1.AWSPlatformStatus{
-							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "CFE"}, {Key: "tester", Value: "member1"}},
+							ResourceTags: []configv1.AWSResourceTag{{Key: "team", Value: "CFE"}, {Key: "tester", Value: "member1"}},
 						},
 					},
 				},
 			},
-			expectedTags: map[string]string{"name": "CFE", "tester": "member1"},
+			expectedTags: map[string]interface{}{"upd": map[string]string{"team": "CFE", "tester": "member1"}},
 		},
 		{
 			testcase: "UserTags_in_Spec_and_Status_MergeCase",
@@ -238,7 +238,7 @@ func TestFetchInfraResourceTags(t *testing.T) {
 					PlatformSpec: configv1.PlatformSpec{
 						Type: "AWS",
 						AWS: &configv1.AWSPlatformSpec{
-							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "NewCFE"}, {Key: "tester", Value: "NewMember"}},
+							ResourceTags: []configv1.AWSResourceTag{{Key: "team", Value: "NewCFE"}, {Key: "tester", Value: "NewMember"}, {Key: "region", Value: ""}},
 						},
 					},
 				},
@@ -246,12 +246,12 @@ func TestFetchInfraResourceTags(t *testing.T) {
 					PlatformStatus: &configv1.PlatformStatus{
 						Type: "",
 						AWS: &configv1.AWSPlatformStatus{
-							ResourceTags: []configv1.AWSResourceTag{{Key: "name", Value: "OldCFE"}, {Key: "tester", Value: "member1"}},
+							ResourceTags: []configv1.AWSResourceTag{{Key: "team", Value: "OldCFE"}, {Key: "tester", Value: "member1"}},
 						},
 					},
 				},
 			},
-			expectedTags: map[string]string{"name": "NewCFE", "tester": "NewMember"},
+			expectedTags: map[string]interface{}{"upd": map[string]string{"team": "NewCFE", "tester": "NewMember"}, "del": map[string]string{"region": ""}},
 		},
 	}
 	for _, tc := range testCases {
@@ -264,14 +264,32 @@ func TestFetchInfraResourceTags(t *testing.T) {
 	}
 }
 
-func assertUserTags(expected, actual map[string]string) bool {
+func assertUserTags(expected, actual map[string]interface{}) bool {
 	if len(expected) != len(actual) {
 		return false
 	}
 
-	for key, value := range actual {
-		if expectedValue, ok := expected[key]; !ok || expectedValue != value {
+	if _, ok := expected["upd"]; ok {
+		tags, ok := actual["upd"].(map[string]string)
+		if !ok {
 			return false
+		}
+		for key, value := range tags {
+			if expectedValue, ok := expected[key]; !ok || expectedValue != value {
+				return false
+			}
+		}
+	}
+
+	if _, ok := expected["del"]; ok {
+		tags, ok := actual["del"].(map[string]string)
+		if !ok {
+			return false
+		}
+		for key, value := range tags {
+			if expectedValue, ok := expected[key]; !ok || expectedValue != value {
+				return false
+			}
 		}
 	}
 

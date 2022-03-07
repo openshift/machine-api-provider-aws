@@ -124,6 +124,7 @@ func (a *Actuator) Update(ctx context.Context, machine *machinev1.Machine) error
 		machine:             machine,
 		awsClientBuilder:    a.awsClientBuilder,
 		configManagedClient: a.configManagedClient,
+		eventRecorder:       a.eventRecorder,
 	})
 	if err != nil {
 		fmtErr := fmt.Errorf(scopeFailFmt, machine.GetName(), err)

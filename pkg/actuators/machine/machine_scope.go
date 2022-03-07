@@ -3,6 +3,7 @@ package machine
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/tools/record"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -32,6 +33,7 @@ type machineScopeParams struct {
 	machine *machinev1.Machine
 	// api server controller runtime client for the openshift-config-managed namespace
 	configManagedClient runtimeclient.Client
+	eventRecorder       record.EventRecorder
 }
 
 type machineScope struct {
@@ -47,6 +49,7 @@ type machineScope struct {
 	originalStatus     machinev1.MachineStatus
 	providerSpec       *machinev1.AWSMachineProviderConfig
 	providerStatus     *machinev1.AWSMachineProviderStatus
+	eventRecorder      record.EventRecorder
 }
 
 func newMachineScope(params machineScopeParams) (*machineScope, error) {
@@ -79,6 +82,7 @@ func newMachineScope(params machineScopeParams) (*machineScope, error) {
 		originalStatus:     params.machine.DeepCopy().Status,
 		providerSpec:       providerSpec,
 		providerStatus:     providerStatus,
+		eventRecorder:      params.eventRecorder,
 	}, nil
 }
 

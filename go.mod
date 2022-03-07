@@ -107,7 +107,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.0 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-// once the PR https://github.com/openshift/api/pull/1064 merge,
-// below statement need to remove and regerate vendor again.
-replace github.com/openshift/api => github.com/josefkarasek/api-1 v0.0.0-20220201081630-94b64b4597dd

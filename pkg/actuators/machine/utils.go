@@ -149,7 +149,7 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]interface{}) error {
+func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]interface{}) error {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
 	if instance == nil || instance.InstanceId == nil {
 		return fmt.Errorf("unexpected nil found in instance: %v", instance)
@@ -524,6 +524,7 @@ func ProviderStatusFromRawExtension(rawExtension *runtime.RawExtension) (*machin
 
 func fetchInfraResourceTags(infra *configv1.Infrastructure) map[string]interface{} {
 	// Should consider the spec over status if spec contains the user tags
+	tagList := make(map[string]interface{})
 	mergedTags := make(map[string]string)
 	deleteTags := make(map[string]string)
 	if infra != nil && infra.Spec.PlatformSpec.AWS != nil {
@@ -553,9 +554,9 @@ func fetchInfraResourceTags(infra *configv1.Infrastructure) map[string]interface
 		}
 	}
 
-	tagList := make(map[string]interface{})
 	tagList["upd"] = mergedTags
 	tagList["del"] = deleteTags
+
 	return tagList
 }
 

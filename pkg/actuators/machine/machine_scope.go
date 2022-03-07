@@ -46,9 +46,9 @@ type machineScope struct {
 	// machine resource
 	machine            *machinev1beta1.Machine
 	machineToBePatched runtimeclient.Patch
-	originalStatus     machinev1.MachineStatus
-	providerSpec       *machinev1.AWSMachineProviderConfig
-	providerStatus     *machinev1.AWSMachineProviderStatus
+	originalStatus     machinev1beta1.MachineStatus
+	providerSpec       *machinev1beta1.AWSMachineProviderConfig
+	providerStatus     *machinev1beta1.AWSMachineProviderStatus
 	eventRecorder      record.EventRecorder
 }
 

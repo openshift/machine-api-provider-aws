@@ -271,17 +271,16 @@ func terminateInstances(client awsclient.Client, instances []*ec2.Instance) ([]*
 	return output.TerminatingInstances, nil
 }
 
-// setAWSMachineProviderCondition sets the condition for the machine and
+// setCondition sets the condition for the machine and
 // returns the new slice of conditions.
 // If the machine does not already have a condition with the specified type,
 // a condition will be added to the slice
 // If the machine does already have a condition with the specified type,
 // the condition will be updated if either of the following are true.
-func setAWSMachineProviderCondition(condition machinev1beta1.AWSMachineProviderCondition, conditions []machinev1beta1.AWSMachineProviderCondition) []machinev1beta1.AWSMachineProviderCondition {
+func setCondition(condition metav1.Condition, conditions []metav1.Condition) []metav1.Condition {
 	now := metav1.Now()
 
-	if existingCondition := findProviderCondition(conditions, condition.Type); existingCondition == nil {
-		condition.LastProbeTime = now
+	if existingCondition := findCondition(conditions, condition.Type); existingCondition == nil {
 		condition.LastTransitionTime = now
 		conditions = append(conditions, condition)
 	} else {
@@ -291,7 +290,7 @@ func setAWSMachineProviderCondition(condition machinev1beta1.AWSMachineProviderC
 	return conditions
 }
 
-func findProviderCondition(conditions []machinev1beta1.AWSMachineProviderCondition, conditionType machinev1beta1.ConditionType) *machinev1beta1.AWSMachineProviderCondition {
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
 	for i := range conditions {
 		if conditions[i].Type == conditionType {
 			return &conditions[i]
@@ -300,7 +299,7 @@ func findProviderCondition(conditions []machinev1beta1.AWSMachineProviderConditi
 	return nil
 }
 
-func updateExistingCondition(newCondition, existingCondition *machinev1beta1.AWSMachineProviderCondition) {
+func updateExistingCondition(newCondition, existingCondition *metav1.Condition) {
 	if !shouldUpdateCondition(newCondition, existingCondition) {
 		return
 	}
@@ -311,10 +310,9 @@ func updateExistingCondition(newCondition, existingCondition *machinev1beta1.AWS
 	existingCondition.Status = newCondition.Status
 	existingCondition.Reason = newCondition.Reason
 	existingCondition.Message = newCondition.Message
-	existingCondition.LastProbeTime = newCondition.LastProbeTime
 }
 
-func shouldUpdateCondition(newCondition, existingCondition *machinev1beta1.AWSMachineProviderCondition) bool {
+func shouldUpdateCondition(newCondition, existingCondition *metav1.Condition) bool {
 	return newCondition.Reason != existingCondition.Reason || newCondition.Message != existingCondition.Message
 }
 
@@ -390,19 +388,19 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 	return addresses, nil
 }
 
-func conditionSuccess() machinev1beta1.AWSMachineProviderCondition {
-	return machinev1beta1.AWSMachineProviderCondition{
-		Type:    machinev1beta1.MachineCreation,
-		Status:  corev1.ConditionTrue,
+func conditionSuccess() metav1.Condition {
+	return metav1.Condition{
+		Type:    string(machinev1beta1.MachineCreation),
+		Status:  metav1.ConditionTrue,
 		Reason:  machinev1beta1.MachineCreationSucceededConditionReason,
 		Message: "Machine successfully created",
 	}
 }
 
-func conditionFailed() machinev1beta1.AWSMachineProviderCondition {
-	return machinev1beta1.AWSMachineProviderCondition{
-		Type:   machinev1beta1.MachineCreation,
-		Status: corev1.ConditionFalse,
+func conditionFailed() metav1.Condition {
+	return metav1.Condition{
+		Type:   string(machinev1beta1.MachineCreation),
+		Status: metav1.ConditionFalse,
 		Reason: machinev1beta1.MachineCreationFailedConditionReason,
 	}
 }

@@ -248,11 +248,13 @@ func (r *Reconciler) update() error {
 	}
 
 	if tagsUpdated, err := correctExistingTags(r.machine, newestInstance, r.awsClient, tagList); err != nil {
+		klog.Errorf("failed to update/delete tagset of %s ec2 instance: %v", r.machine.Name, err)
 		r.eventRecorder.Eventf(r.machine, corev1.EventTypeWarning, "UpdateAWSTags",
-			"Failed to update tags of %s ec2 instance", *newestInstance.InstanceId)
+			"Failed to update/delete tagset of %s ec2 instance", r.machine.Name)
 	} else if tagsUpdated {
+		klog.Infof("successfully updated/deleted tagset of %s ec2 instance", r.machine.Name)
 		r.eventRecorder.Eventf(r.machine, corev1.EventTypeNormal, "UpdateAWSTags",
-			"Successfully updated tags of %s ec2 instance", *newestInstance.InstanceId)
+			"Successfully updated/deleted tagset of %s ec2 instance", r.machine.Name)
 	}
 	klog.Infof("Updated machine %s", r.machine.Name)
 

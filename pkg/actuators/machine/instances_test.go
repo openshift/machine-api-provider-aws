@@ -1203,6 +1203,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		tags               []*ec2.Tag
 		userTags           map[string]interface{}
 		expectedCreateTags bool
+		expectedTagUpdate  bool
 	}{
 		{
 			name: "Valid Tags",
@@ -1217,6 +1218,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: false,
+			expectedTagUpdate:  true,
 		},
 		{
 			name: "Valid Tags and Create",
@@ -1234,6 +1236,7 @@ func TestCorrectExistingTags(t *testing.T) {
 			userTags: map[string]interface{}{
 				"upd": map[string]string{"UserDefinedTag2": "UserDefinedTagValue2"},
 			},
+			expectedTagUpdate: true,
 		},
 		{
 			name: "Valid Tags and Update",
@@ -1255,6 +1258,7 @@ func TestCorrectExistingTags(t *testing.T) {
 			userTags: map[string]interface{}{
 				"upd": map[string]string{"UserDefinedTag1": "ModifiedValue"},
 			},
+			expectedTagUpdate: true,
 		},
 		{
 			name: "Valid Tags and Update, Delete",
@@ -1276,6 +1280,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 				"del": map[string]string{"UserDefinedTag1": ""},
 			},
+			expectedTagUpdate: true,
 		},
 		{
 			name: "Valid Tags and Delete",
@@ -1297,6 +1302,7 @@ func TestCorrectExistingTags(t *testing.T) {
 			userTags: map[string]interface{}{
 				"del": map[string]string{"UserDefinedTag3": ""},
 			},
+			expectedTagUpdate: true,
 		},
 		{
 			name: "Invalid Name Tag Correct Cluster",
@@ -1311,6 +1317,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
+			expectedTagUpdate:  false,
 		},
 		{
 			name: "Invalid Cluster Tag Correct Name",
@@ -1325,6 +1332,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
+			expectedTagUpdate:  false,
 		},
 		{
 			name: "Both Tags Wrong",
@@ -1339,11 +1347,13 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
+			expectedTagUpdate:  false,
 		},
 		{
 			name:               "No Tags",
 			tags:               nil,
 			expectedCreateTags: true,
+			expectedTagUpdate:  false,
 		},
 	}
 	for _, tc := range testCases {
@@ -1358,8 +1368,8 @@ func TestCorrectExistingTags(t *testing.T) {
 				mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).MinTimes(1)
 			}
 
-			err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
-			if err != nil {
+			tagsUpdated, err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
+			if err != nil || tagsUpdated != tc.expectedTagUpdate {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 		})

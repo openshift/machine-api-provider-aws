@@ -149,14 +149,14 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]interface{}) error {
+func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance, client awsclient.Client, tags map[string]interface{}) (bool, error) {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
 	if instance == nil || instance.InstanceId == nil {
-		return fmt.Errorf("unexpected nil found in instance: %v", instance)
+		return false, fmt.Errorf("unexpected nil found in instance: %v", instance)
 	}
 	clusterID, ok := getClusterID(machine)
 	if !ok {
-		return fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
+		return false, fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
 	}
 	nameTagOk := false
 	clusterTagOk := false
@@ -205,7 +205,7 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToAdd)
 		_, err := client.CreateTags(input)
-		return err
+		return false, err
 	}
 
 	delTags, _ := tags["del"].(map[string]string)
@@ -227,10 +227,14 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		klog.Infof("deleting Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToDel)
 		_, err := client.DeleteTags(input)
-		return err
+		return false, err
 	}
 
-	return nil
+	if len(tagsToAdd) == 0 && len(tagsToDel) == 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // getInstances returns all instances that have a tag matching our machine name,

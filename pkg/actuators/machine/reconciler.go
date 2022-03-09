@@ -247,10 +247,10 @@ func (r *Reconciler) update() error {
 		return fmt.Errorf("failed to set machine cloud provider specifics: %w", err)
 	}
 
-	if err = correctExistingTags(r.machine, newestInstance, r.awsClient, tagList); err != nil {
+	if tagsUpdated, err := correctExistingTags(r.machine, newestInstance, r.awsClient, tagList); err != nil {
 		r.eventRecorder.Eventf(r.machine, corev1.EventTypeWarning, "UpdateAWSTags",
 			"Failed to update tags of %s ec2 instance", *newestInstance.InstanceId)
-	} else {
+	} else if tagsUpdated {
 		r.eventRecorder.Eventf(r.machine, corev1.EventTypeNormal, "UpdateAWSTags",
 			"Successfully updated tags of %s ec2 instance", *newestInstance.InstanceId)
 	}

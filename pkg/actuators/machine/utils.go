@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	errorutil "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
 )
 
@@ -160,6 +161,7 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 	}
 	nameTagOk := false
 	clusterTagOk := false
+	tagsModified := false
 	updTags, _ := tags["upd"].(map[string]string)
 	for _, tag := range instance.Tags {
 		if tag.Key != nil && tag.Value != nil {
@@ -194,8 +196,10 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		})
 	}
 
+	errs := []error{}
 	if len(tagsToAdd) != 0 {
 		// Create tags only adds/replaces what is present, does not affect other tags.
+		tagsModified = true
 		input := &ec2.CreateTagsInput{
 			Resources: []*string{
 				aws.String(*instance.InstanceId),
@@ -204,8 +208,9 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		}
 		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToAdd)
-		_, err := client.CreateTags(input)
-		return false, err
+		if _, err := client.CreateTags(input); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	delTags, _ := tags["del"].(map[string]string)
@@ -218,6 +223,7 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 	}
 
 	if len(tagsToDel) != 0 {
+		tagsModified = true
 		input := &ec2.DeleteTagsInput{
 			Resources: []*string{
 				aws.String(*instance.InstanceId),
@@ -226,15 +232,20 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		}
 		klog.Infof("deleting Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToDel)
-		_, err := client.DeleteTags(input)
-		return false, err
+		if _, err := client.DeleteTags(input); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
-	if len(tagsToAdd) == 0 && len(tagsToDel) == 0 {
-		return false, nil
+	if len(errs) != 0 {
+		return false, errorutil.NewAggregate(errs)
 	}
 
-	return true, nil
+	if tagsModified {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // getInstances returns all instances that have a tag matching our machine name,

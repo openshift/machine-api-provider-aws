@@ -155,13 +155,40 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 	if instance == nil || instance.InstanceId == nil {
 		return false, fmt.Errorf("unexpected nil found in instance: %v", instance)
 	}
+
 	clusterID, ok := getClusterID(machine)
 	if !ok {
 		return false, fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
 	}
+
 	nameTagOk := false
 	clusterTagOk := false
 	tagsModified := false
+
+	delTags, _ := tags["del"].(map[string]string)
+	tagsToDel := []*ec2.Tag{}
+	errs := []error{}
+	for key, _ := range delTags {
+		tagsToDel = append(tagsToDel, &ec2.Tag{
+			Key: aws.String(key),
+		})
+	}
+
+	if len(tagsToDel) != 0 {
+		tagsModified = true
+		input := &ec2.DeleteTagsInput{
+			Resources: []*string{
+				aws.String(*instance.InstanceId),
+			},
+			Tags: tagsToDel,
+		}
+		klog.Infof("deleting Tags for machine: %v; instanceID: %v, tags: %+v",
+			machine.Name, *instance.InstanceId, tagsToDel)
+		if _, err := client.DeleteTags(input); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	updTags, _ := tags["upd"].(map[string]string)
 	for _, tag := range instance.Tags {
 		if tag.Key != nil && tag.Value != nil {
@@ -196,7 +223,6 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		})
 	}
 
-	errs := []error{}
 	if len(tagsToAdd) != 0 {
 		// Create tags only adds/replaces what is present, does not affect other tags.
 		tagsModified = true
@@ -209,30 +235,6 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToAdd)
 		if _, err := client.CreateTags(input); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	delTags, _ := tags["del"].(map[string]string)
-	tagsToDel := []*ec2.Tag{}
-	for key, value := range delTags {
-		tagsToDel = append(tagsToDel, &ec2.Tag{
-			Key:   aws.String(key),
-			Value: aws.String(value),
-		})
-	}
-
-	if len(tagsToDel) != 0 {
-		tagsModified = true
-		input := &ec2.DeleteTagsInput{
-			Resources: []*string{
-				aws.String(*instance.InstanceId),
-			},
-			Tags: tagsToDel,
-		}
-		klog.Infof("deleting Tags for machine: %v; instanceID: %v, tags: %+v",
-			machine.Name, *instance.InstanceId, tagsToDel)
-		if _, err := client.DeleteTags(input); err != nil {
 			errs = append(errs, err)
 		}
 	}

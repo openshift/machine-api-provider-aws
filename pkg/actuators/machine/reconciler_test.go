@@ -9,7 +9,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/golang/mock/gomock"
+	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
@@ -756,6 +758,152 @@ func TestUpdate(t *testing.T) {
 				if err != nil {
 					t.Errorf("reconciler was not expected to return error: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	testCases := []struct {
+		name          string
+		machine       func() *machinev1beta1.Machine
+		expectedError error
+		awsClient     func(ctrl *gomock.Controller) awsclient.Client
+	}{
+		{
+			name: "When the EC2 Instance doesn't exist",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).Times(1)
+				return mockAWSClient
+			},
+		},
+		{
+			name: "It deregisters the load balancer attachement",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
+				return mockAWSClient
+			},
+		},
+		{
+			name: "It terminates the instance",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any()).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(&ec2.TerminateInstancesInput{
+					InstanceIds: []*string{
+						aws.String("test-id"),
+					},
+				}).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
+				return mockAWSClient
+			},
+		},
+		{
+			name: "Does not terminate the instance if it cannot deregister the target",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: errors.New("failed to updated update load balancers: arn2: unauthorized"),
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, errors.New("unauthorized")).Times(1)
+				return mockAWSClient
+			},
+		},
+		{
+			name: "Does not error when there are no load balancer targets",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(&elbv2.DescribeTargetGroupsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
+				return mockAWSClient
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			ctrl := gomock.NewController(t)
+			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject())
+
+			machineScope, err := newMachineScope(machineScopeParams{
+				client:  fakeClient,
+				machine: tc.machine(),
+				awsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client) (awsclient.Client, error) {
+					return tc.awsClient(ctrl), nil
+				},
+			})
+			g.Expect(err).ToNot(HaveOccurred())
+
+			reconciler := newReconciler(machineScope)
+
+			err = reconciler.delete()
+
+			if tc.expectedError != nil {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedError.Error())))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
 			}
 		})
 	}

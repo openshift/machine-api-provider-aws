@@ -141,6 +141,15 @@ func (r *Reconciler) delete() error {
 		return nil
 	}
 
+	if err = r.removeFromLoadBalancers(existingInstances); err != nil {
+		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+			Name:      r.machine.Name,
+			Namespace: r.machine.Namespace,
+			Reason:    err.Error(),
+		})
+		return fmt.Errorf("failed to updated update load balancers: %w", err)
+	}
+
 	terminatingInstances, err := terminateInstances(r.awsClient, existingInstances)
 	if err != nil {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
@@ -149,15 +158,6 @@ func (r *Reconciler) delete() error {
 			Reason:    err.Error(),
 		})
 		return fmt.Errorf("failed to delete instaces: %w", err)
-	}
-
-	if err = r.removeFromLoadBalancers(existingInstances); err != nil {
-		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
-			Name:      r.machine.Name,
-			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
-		})
-		return fmt.Errorf("failed to updated update load balancers: %w", err)
 	}
 
 	if len(terminatingInstances) == 1 {

@@ -307,6 +307,17 @@ func stubDescribeTargetHealthOutput() *elbv2.DescribeTargetHealthOutput {
 	return &elbv2.DescribeTargetHealthOutput{}
 }
 
+func stubDeregisterTargetsInput(ipAddr string) *elbv2.DeregisterTargetsInput {
+	return &elbv2.DeregisterTargetsInput{
+		TargetGroupArn: aws.String("arn2"),
+		Targets: []*elbv2.TargetDescription{
+			{
+				Id: aws.String(ipAddr),
+			},
+		},
+	}
+}
+
 func stubReservation(imageID, instanceID string, privateIP string) *ec2.Reservation {
 	az := defaultAvailabilityZone
 	return &ec2.Reservation{

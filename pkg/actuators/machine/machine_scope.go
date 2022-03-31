@@ -10,6 +10,7 @@ import (
 	machineapierros "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -160,7 +161,7 @@ func (s *machineScope) getUserData() ([]byte, error) {
 	return userData, nil
 }
 
-func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition machinev1beta1.AWSMachineProviderCondition) error {
+func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition metav1.Condition) error {
 	klog.Infof("%s: Updating status", s.machine.Name)
 
 	networkAddresses := []corev1.NodeAddress{}
@@ -191,7 +192,7 @@ func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition machi
 	klog.Infof("%s: finished calculating AWS status", s.machine.Name)
 
 	s.machine.Status.Addresses = networkAddresses
-	s.providerStatus.Conditions = setAWSMachineProviderCondition(condition, s.providerStatus.Conditions)
+	s.providerStatus.Conditions = setCondition(condition, s.providerStatus.Conditions)
 
 	return nil
 }

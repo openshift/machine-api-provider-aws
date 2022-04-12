@@ -53,6 +53,10 @@ func (c *awsClient) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInpu
 	}, nil
 }
 
+func (c *awsClient) DescribePlacementGroups(*ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
+	return &ec2.DescribePlacementGroupsOutput{}, nil
+}
+
 func (c *awsClient) DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
 	return machine.StubDescribeDHCPOptions()
 }
@@ -103,6 +107,14 @@ func (c *awsClient) DescribeVolumes(input *ec2.DescribeVolumesInput) (*ec2.Descr
 
 func (c *awsClient) CreateTags(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 	return &ec2.CreateTagsOutput{}, nil
+}
+
+func (c *awsClient) CreatePlacementGroup(input *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
+	return &ec2.CreatePlacementGroupOutput{}, nil
+}
+
+func (c *awsClient) DeletePlacementGroup(input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
+	return &ec2.DeletePlacementGroupOutput{}, nil
 }
 
 func (c *awsClient) RegisterInstancesWithLoadBalancer(input *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {

@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
@@ -24,8 +25,9 @@ var _ = Describe("Reconciler", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		r := Reconciler{
-			Client: mgr.GetClient(),
-			Log:    log.Log,
+			Client:      mgr.GetClient(),
+			Log:         log.Log,
+			regionCache: client.NewRegionCache(),
 		}
 		Expect(r.SetupWithManager(mgr, controller.Options{})).To(Succeed())
 

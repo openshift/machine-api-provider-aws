@@ -170,7 +170,7 @@ func main() {
 	ctrl.SetLogger(klogr.New())
 	setupLog := ctrl.Log.WithName("setup")
 
-	if err = (&machinesetcontroller.Reconciler{
+	if err := (&machinesetcontroller.Reconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("MachineSet"),
 	}).SetupWithManager(mgr, controller.Options{}); err != nil {

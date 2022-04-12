@@ -23,7 +23,7 @@ var _ = Describe("AWSPlacementGroupReconciler", func() {
 		mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0", Namespace: namespace.Name})
 		Expect(err).ToNot(HaveOccurred())
 
-		r := Reconciler{
+		r := AWSPlacementGroupReconciler{
 			Client: mgr.GetClient(),
 			Log:    log.Log,
 		}

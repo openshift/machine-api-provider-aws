@@ -81,7 +81,6 @@ func (mr *MockClientMockRecorder) DeletePlacementGroup(arg0 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePlacementGroup", reflect.TypeOf((*MockClient)(nil).DeletePlacementGroup), arg0)
 }
 
-
 // DescribeAvailabilityZones mocks base method.
 func (m *MockClient) DescribeAvailabilityZones(arg0 *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 	m.ctrl.T.Helper()

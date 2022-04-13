@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	gmg "github.com/onsi/gomega"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
@@ -1185,6 +1187,59 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 			if !reflect.DeepEqual(request, tc.expectedRequest) {
 				t.Errorf("Case: %s. Got: %v, expected: %v", tc.name, request, tc.expectedRequest)
 			}
+		})
+	}
+}
+
+func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
+	testCases := []struct {
+		name           string
+		providerConfig *machinev1beta1.AWSMachineProviderConfig
+		expected       *ec2.InstanceMetadataOptionsRequest
+	}{
+		{
+			name:           "no imds options specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{},
+			expected:       nil,
+		},
+		{
+			name: "imds required",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					Authentication: machinev1beta1.MetadataServiceAuthenticationRequired,
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpTokens: aws.String(ec2.HttpTokensStateRequired),
+			},
+		},
+		{
+			name: "imds optional",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					Authentication: machinev1beta1.MetadataServiceAuthenticationOptional,
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpTokens: aws.String(ec2.HttpTokensStateOptional),
+			},
+		},
+		{
+			// Should not happen due to resource validation during creation, just it case for ensure that doesn't blow up
+			name: "crappy input",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					Authentication: "foooobaaaar",
+				},
+			},
+			expected: nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gmg.NewWithT(t)
+			req := getInstanceMetadataOptionsRequest(tc.providerConfig)
+			g.Expect(req).To(gmg.BeEquivalentTo(tc.expected))
 		})
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var _ = Describe("AWSPlacementGroupReconciler", func() {
+var _ = Describe("Reconciler", func() {
 	var mgrCancel context.CancelFunc
 	var mgrDone chan struct{}
 	var fakeRecorder *record.FakeRecorder
@@ -23,7 +23,7 @@ var _ = Describe("AWSPlacementGroupReconciler", func() {
 		mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0", Namespace: namespace.Name})
 		Expect(err).ToNot(HaveOccurred())
 
-		r := AWSPlacementGroupReconciler{
+		r := Reconciler{
 			Client: mgr.GetClient(),
 			Log:    log.Log,
 		}

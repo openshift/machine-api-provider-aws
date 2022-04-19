@@ -45,8 +45,8 @@ const (
 	configurationInSyncConditionReason string = "ConfigurationInSync"
 )
 
-// AWSPlacementGroupReconciler reconciles AWSPlacementGroup.
-type AWSPlacementGroupReconciler struct {
+// Reconciler reconciles AWSPlacementGroup.
+type Reconciler struct {
 	Client              client.Client
 	Log                 logr.Logger
 	AWSClientBuilder    awsclient.AwsClientBuilderFuncType
@@ -57,7 +57,7 @@ type AWSPlacementGroupReconciler struct {
 }
 
 // SetupWithManager creates a new controller for a manager.
-func (r *AWSPlacementGroupReconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
+func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, options controller.Options) error {
 	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&machinev1.AWSPlacementGroup{}).
 		// TODO(damdo): uncomment when Machine's ProviderSpec supports Groups
@@ -73,8 +73,8 @@ func (r *AWSPlacementGroupReconciler) SetupWithManager(mgr ctrl.Manager, options
 	return nil
 }
 
-// Reconcile implements controller runtime AWSPlacementGroupReconciler interface.
-func (r *AWSPlacementGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Reconcile implements controller runtime Reconciler interface.
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("namespace", req.Namespace, "name", req.Name)
 	logger.V(3).Info("Reconciling aws placement group")
 
@@ -142,7 +142,7 @@ func (r *AWSPlacementGroupReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 // reconcile reconciles an AWSPlacementGroup.
-func (r *AWSPlacementGroupReconciler) reconcile(ctx context.Context, awsClient awsclient.Client,
+func (r *Reconciler) reconcile(ctx context.Context, awsClient awsclient.Client,
 	logger logr.Logger, infra *configv1.Infrastructure, awsPlacementGroup *machinev1.AWSPlacementGroup) (ctrl.Result, error) {
 	now := metav1.Now()
 	if awsPlacementGroup.Status.ExpiresAt == nil ||

@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -81,19 +80,14 @@ var _ = Describe("Handler Suite", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		h = handlerInterface.(*handler)
-
-		// set pollURL so we can override initial value later
-		h.pollURL = nil
 	})
 
 	JustBeforeEach(func() {
 		Expect(httpHandler).ToNot(BeNil())
 		terminationServer = httptest.NewServer(httpHandler)
 
-		if h.pollURL == nil {
-			pollURL, err := url.Parse(terminationServer.URL)
-			Expect(err).ToNot(HaveOccurred())
-			h.pollURL = pollURL
+		if h.endpoint == nil {
+			h.endpoint = &terminationServer.URL
 		}
 	})
 
@@ -186,7 +180,7 @@ var _ = Describe("Handler Suite", func() {
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError("error polling termination endpoint: unexpected status: 500")))
+					Eventually(errs).Should(Receive(MatchError("error polling termination endpoint: EC2MetadataError: failed to make EC2Metadata request\n\n\tstatus code: 500, request id: ")))
 				})
 
 				It("should not delete the machine", func() {
@@ -196,11 +190,12 @@ var _ = Describe("Handler Suite", func() {
 
 			Context("and the poll URL cannot be reached", func() {
 				BeforeEach(func() {
-					h.pollURL = &url.URL{Opaque: "abc#1://localhost"}
+					nonReachable := "abc#1://localhost"
+					h.endpoint = &nonReachable
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError(ContainSubstring("error polling termination endpoint: could not get URL \"abc#1://localhost\":"))))
+					Eventually(errs).Should(Receive(MatchError(ContainSubstring("RequestError: send request failed\ncaused by: Get \"/latest/meta-data/spot/termination-time#1://localhost\": unsupported protocol scheme \"\""))))
 				})
 
 				It("should not delete the machine", func() {
@@ -309,7 +304,7 @@ var _ = Describe("Handler Suite", func() {
 	})
 })
 
-// mockHTTPHandler is used to mock the pollURL responses during tests
+// mockHTTPHandler is used to mock the endpoint responses during tests
 type mockHTTPHandler struct {
 	handleFunc func(rw http.ResponseWriter, req *http.Request)
 }

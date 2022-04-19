@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	awsrequest "github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/session"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +22,7 @@ import (
 )
 
 const (
-	awsTerminationEndpointURL                           = "http://169.254.169.254/latest/meta-data/spot/termination-time"
+	awsTerminationEndpointURL                           = "/latest/meta-data/spot/termination-time"
 	terminatingConditionType   corev1.NodeConditionType = "Terminating"
 	terminationRequestedReason                          = "TerminationRequested"
 )
@@ -36,17 +40,10 @@ func NewHandler(logger logr.Logger, cfg *rest.Config, pollInterval time.Duration
 		return nil, fmt.Errorf("error creating client: %v", err)
 	}
 
-	pollURL, err := url.Parse(awsTerminationEndpointURL)
-	if err != nil {
-		// This should never happen
-		panic(err)
-	}
-
 	logger = logger.WithValues("node", nodeName, "namespace", namespace)
 
 	return &handler{
 		client:       c,
-		pollURL:      pollURL,
 		pollInterval: pollInterval,
 		nodeName:     nodeName,
 		namespace:    namespace,
@@ -57,8 +54,9 @@ func NewHandler(logger logr.Logger, cfg *rest.Config, pollInterval time.Duration
 // handler implements the logic to check the termination endpoint and
 // marks the node for termination
 type handler struct {
-	client       client.Client
-	pollURL      *url.URL
+	client client.Client
+	// endpoint - custom imds service url. For testing purposes.
+	endpoint     *string
 	pollInterval time.Duration
 	nodeName     string
 	namespace    string
@@ -69,11 +67,17 @@ type handler struct {
 func (h *handler) Run(stop <-chan struct{}) error {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	imdsSession := session.Must(session.NewSession(&aws.Config{
+		MaxRetries: aws.Int(3),
+		Endpoint:   h.endpoint,
+	}))
+	imdsClient := ec2metadata.New(imdsSession)
+
 	errs := make(chan error, 1)
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		errs <- h.run(ctx, wg)
+		errs <- h.run(ctx, imdsClient, wg)
 	}()
 
 	select {
@@ -88,32 +92,37 @@ func (h *handler) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (h *handler) run(ctx context.Context, wg *sync.WaitGroup) error {
+func (h *handler) run(ctx context.Context, imdsClient *ec2metadata.EC2Metadata, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	logger := h.log.WithValues("node", h.nodeName)
 	logger.V(1).Info("Monitoring node termination")
 
 	if err := wait.PollImmediateUntil(h.pollInterval, func() (bool, error) {
-		resp, err := http.Get(h.pollURL.String())
-		if resp != nil {
-			defer resp.Body.Close()
+		// code below mostly replicates GetMetadataWithContext method of the imdsClient.
+		// https://github.com/aws/aws-sdk-go/blob/v1.43.20/aws/ec2metadata/api.go#L61
+		// Since it's not possible to reliably extract information from result of such function, manual request prep
+		// and handling happens here.
+		op := &awsrequest.Operation{
+			Name:       "GetMetadata",
+			HTTPMethod: "GET",
+			HTTPPath:   awsTerminationEndpointURL,
 		}
+		req := imdsClient.NewRequest(op, nil, nil)
+		req.SetContext(ctx)
+		// we do not care about response data, all what we are interesting about is the status code.
+		// successful request means that instance was marked for termination.
+		// If instance not yet marked, response with 404 code will be returned from imds
+		err := req.Send()
 		if err != nil {
-			return false, fmt.Errorf("could not get URL %q: %v", h.pollURL.String(), err)
+			if req.HTTPResponse.StatusCode == http.StatusNotFound {
+				logger.V(2).Info("Instance not marked for termination")
+				return false, nil
+			}
+			return false, fmt.Errorf("%w", err)
 		}
-		switch resp.StatusCode {
-		case http.StatusNotFound:
-			// Instance not terminated yet
-			logger.V(2).Info("Instance not marked for termination")
-			return false, nil
-		case http.StatusOK:
-			// Instance marked for termination
-			return true, nil
-		default:
-			// Unknown case, return an error
-			return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-		}
+		// successful request, instance marked for termination. Done here.
+		return true, nil
 	}, ctx.Done()); err != nil {
 		return fmt.Errorf("error polling termination endpoint: %v", err)
 	}

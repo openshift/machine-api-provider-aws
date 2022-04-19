@@ -373,6 +373,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		NetworkInterfaces:     networkInterfaces,
 		UserData:              &userDataEnc,
 		Placement:             placement,
+		MetadataOptions:       getInstanceMetadataOptionsRequest(machineProviderConfig),
 		InstanceMarketOptions: getInstanceMarketOptionsRequest(machineProviderConfig),
 	}
 
@@ -553,4 +554,24 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 	}
 
 	return placement, nil
+}
+
+func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.InstanceMetadataOptionsRequest {
+	imdsOptions := &ec2.InstanceMetadataOptionsRequest{}
+
+	switch providerConfig.MetadataServiceOptions.Authentication {
+	case "":
+		// not set, let aws to pick a default. `optional` at this point.
+		// https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_InstanceMetadataOptionsRequest.html
+	case machinev1beta1.MetadataServiceAuthenticationOptional:
+		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateOptional)
+	case machinev1beta1.MetadataServiceAuthenticationRequired:
+		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateRequired)
+	}
+
+	if *imdsOptions == (ec2.InstanceMetadataOptionsRequest{}) {
+		// return nil instead of empty struct if there is no options set
+		return nil
+	}
+	return imdsOptions
 }

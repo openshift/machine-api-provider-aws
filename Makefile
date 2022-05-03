@@ -114,7 +114,7 @@ test-e2e: ## Run e2e tests
 
 .PHONY: lint
 lint: ## Go lint your code
-	$(DOCKER_CMD) hack/go-lint.sh -min_confidence 0.3 $$(go list -f '{{ .ImportPath }}' ./... | grep -v -e 'github.com/openshift/machine-api-provider-aws/test' -e 'github.com/openshift/machine-api-provider-aws/pkg/cloud/aws/client/mock')
+	$(DOCKER_CMD) hack/go-lint.sh -min_confidence 0.3 $$(go list -f '{{ .ImportPath }}' ./... | grep -v -e 'github.com/openshift/machine-api-provider-aws/test' -e 'github.com/openshift/machine-api-provider-aws/pkg/cloud/aws/client/mock' -e 'github.com/openshift/machine-api-provider-aws/pkg/api/machine/v1')
 
 .PHONY: fmt
 fmt: ## Go fmt your code

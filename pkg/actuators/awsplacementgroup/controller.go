@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1 "github.com/openshift/machine-api-provider-aws/pkg/api/machine/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"

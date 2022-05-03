@@ -9,7 +9,7 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
-	github.com/openshift/api v0.0.0-20220412161459-8f38b7648620
+	github.com/openshift/api v0.0.0-20220429222041-b25f69a603a7
 	github.com/openshift/machine-api-operator v0.2.1-0.20220327131531-58ba8507d869
 	k8s.io/api v0.23.0
 	k8s.io/apimachinery v0.23.0
@@ -83,7 +83,7 @@ require (
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd // indirect
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
+	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect

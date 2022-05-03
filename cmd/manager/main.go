@@ -24,7 +24,6 @@ import (
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
-	awsplacementgroupcontroller "github.com/openshift/machine-api-provider-aws/pkg/actuators/awsplacementgroup"
 	machineactuator "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
 	machinesetcontroller "github.com/openshift/machine-api-provider-aws/pkg/actuators/machineset"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
@@ -176,14 +175,6 @@ func main() {
 		Log:    ctrl.Log.WithName("controllers").WithName("MachineSet"),
 	}).SetupWithManager(mgr, controller.Options{}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MachineSet")
-		os.Exit(1)
-	}
-
-	if err = (&awsplacementgroupcontroller.Reconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AWSPlacementGroup"),
-	}).SetupWithManager(mgr, controller.Options{}); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AWSPlacementGroup")
 		os.Exit(1)
 	}
 

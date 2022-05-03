@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	configv1 "github.com/openshift/api/config/v1"
-	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
@@ -24,12 +23,11 @@ const (
 	awsCredentialsSecretName = "aws-credentials-secret"
 	userDataSecretName       = "aws-actuator-user-data-secret"
 
-	keyName                = "aws-actuator-key-name"
-	stubClusterID          = "aws-actuator-cluster"
-	stubMachineName        = "aws-actuator-testing-machine"
-	stubAMIID              = "ami-a9acbbd6"
-	stubInstanceID         = "i-02fcb933c5da7085c"
-	stubPlacementGroupName = "placement-group-1"
+	keyName         = "aws-actuator-key-name"
+	stubClusterID   = "aws-actuator-cluster"
+	stubMachineName = "aws-actuator-testing-machine"
+	stubAMIID       = "ami-a9acbbd6"
+	stubInstanceID  = "i-02fcb933c5da7085c"
 )
 
 const userDataBlob = `#cloud-config
@@ -245,36 +243,6 @@ func stubInvalidInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Placement.Tenancy = "invalid"
 	return pc
-}
-
-func stubPlacementGroupNameConfig() *machinev1beta1.AWSMachineProviderConfig {
-	pc := stubProviderConfig()
-	pc.Placement.Group.Name = stubPlacementGroupName
-	return pc
-}
-
-func stubPlacementGroupNumberConfig(partitionNumber int32) *machinev1beta1.AWSMachineProviderConfig {
-	pc := stubProviderConfig()
-	pc.Placement.Group.Name = stubPlacementGroupName
-	pc.Placement.PartitionNumber = partitionNumber
-	return pc
-}
-
-func stubPlacementGroup(groupType machinev1.AWSPlacementGroupType) *machinev1.AWSPlacementGroup {
-	return &machinev1.AWSPlacementGroup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      stubPlacementGroupName,
-			Namespace: defaultNamespace,
-		},
-		Spec: machinev1.AWSPlacementGroupSpec{
-			ManagementSpec: machinev1.AWSPlacementGroupManagementSpec{
-				ManagementState: machinev1.ManagedManagementState,
-				Managed: &machinev1.ManagedAWSPlacementGroup{
-					GroupType: groupType,
-				},
-			},
-		},
-	}
 }
 
 func stubDescribeLoadBalancersOutput() *elbv2.DescribeLoadBalancersOutput {

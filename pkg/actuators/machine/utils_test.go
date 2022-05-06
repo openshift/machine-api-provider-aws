@@ -84,6 +84,30 @@ func TestExtractNodeAddresses(t *testing.T) {
 			domainNames: []string{"openshift.com", "openshift.io"},
 		},
 		{
+			testcase: "custom-domain that is empty",
+			instance: &ec2.Instance{
+				PrivateDnsName: aws.String("ec2.example.net"),
+				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+					{
+						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
+						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+							{
+								Primary:          aws.Bool(true),
+								PrivateIpAddress: aws.String("10.0.0.5"),
+							},
+						},
+					},
+				},
+			},
+			expectedAddresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: "10.0.0.5"},
+				{Type: corev1.NodeInternalDNS, Address: "ec2.example.net"},
+				{Type: corev1.NodeHostName, Address: "ec2.example.net"},
+				{Type: corev1.NodeInternalDNS, Address: "ec2"},
+			},
+			domainNames: []string{""},
+		},
+		{
 			testcase: "custom-domain no duplicates",
 			instance: &ec2.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),

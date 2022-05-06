@@ -340,7 +340,7 @@ func TestGetCustomDomainFromDHCP(t *testing.T) {
 			t.Errorf("error when calling getCustomDomainFromDHCP: %v", err)
 		}
 		if !reflect.DeepEqual(got, tc.expected) {
-			t.Errorf("Case: %s. Got: %v, expected: %v", tc.description, got, tc.expected)
+			t.Errorf("Case: %s. Got: %#v, expected: %#v", tc.description, got, tc.expected)
 		}
 	}
 }

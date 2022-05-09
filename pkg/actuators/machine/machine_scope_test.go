@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
@@ -297,37 +298,76 @@ func TestGetCustomDomainFromDHCP(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockAWSClient := mockaws.NewMockClient(mockCtrl)
 	dhcpID := "someID"
-	expectedDomains := "openshift.com openshift.io"
 	mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(&ec2.DescribeVpcsOutput{
 		Vpcs: []*ec2.Vpc{
 			{DhcpOptionsId: &dhcpID},
 		},
 	}, nil).AnyTimes()
 
-	mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(&ec2.DescribeDhcpOptionsOutput{
-		DhcpOptions: []*ec2.DhcpOptions{
-			{
-				DhcpConfigurations: []*ec2.DhcpConfiguration{
+	testCases := []struct {
+		description               string
+		describeDhcpOptionsOutput ec2.DescribeDhcpOptionsOutput
+		expected                  []string
+	}{
+		{
+			description: "Returns two",
+			expected:    []string{"openshift.com", "openshift.io"},
+			describeDhcpOptionsOutput: ec2.DescribeDhcpOptionsOutput{
+				DhcpOptions: []*ec2.DhcpOptions{
 					{
-						Key: &dhcpDomainKeyName,
-						Values: []*ec2.AttributeValue{
+						DhcpConfigurations: []*ec2.DhcpConfiguration{
 							{
-								Value: &expectedDomains,
+								Key: &dhcpDomainKeyName,
+								Values: []*ec2.AttributeValue{
+									{
+										Value: aws.String("openshift.com openshift.io"),
+									},
+								},
 							},
 						},
 					},
 				},
 			},
 		},
-	}, nil).AnyTimes()
-
-	testCases := []struct {
-		description string
-		expected    []string
-	}{
 		{
-			description: "Returns two",
-			expected:    []string{"openshift.com", "openshift.io"},
+			description: "Returns one",
+			expected:    []string{"openshift.com"},
+			describeDhcpOptionsOutput: ec2.DescribeDhcpOptionsOutput{
+				DhcpOptions: []*ec2.DhcpOptions{
+					{
+						DhcpConfigurations: []*ec2.DhcpConfiguration{
+							{
+								Key: &dhcpDomainKeyName,
+								Values: []*ec2.AttributeValue{
+									{
+										Value: aws.String("openshift.com"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "Returns a valid empty domain when domain-name is missing but domain-name-servers exists",
+			expected:    []string{""},
+			describeDhcpOptionsOutput: ec2.DescribeDhcpOptionsOutput{
+				DhcpOptions: []*ec2.DhcpOptions{
+					{
+						DhcpConfigurations: []*ec2.DhcpConfiguration{
+							{
+								Key: aws.String("domain-name-servers"),
+								Values: []*ec2.AttributeValue{
+									{
+										Value: aws.String("AmazonProvidedDNS"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -335,12 +375,15 @@ func TestGetCustomDomainFromDHCP(t *testing.T) {
 		mS := machineScope{
 			awsClient: mockAWSClient,
 		}
+
+		mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(&tc.describeDhcpOptionsOutput, nil).AnyTimes()
+
 		got, err := mS.getCustomDomainFromDHCP(nil)
 		if err != nil {
 			t.Errorf("error when calling getCustomDomainFromDHCP: %v", err)
 		}
 		if !reflect.DeepEqual(got, tc.expected) {
-			t.Errorf("Case: %s. Got: %v, expected: %v", tc.description, got, tc.expected)
+			t.Errorf("Case: %s. Got: %#v, expected: %#v", tc.description, got, tc.expected)
 		}
 	}
 }

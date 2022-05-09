@@ -373,7 +373,10 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalDNS, Address: privateDNSName})
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeHostName, Address: privateDNSName})
 		for _, dn := range domainNames {
-			customHostName := strings.Join([]string{strings.Split(privateDNSName, ".")[0], dn}, ".")
+			customHostName := strings.Split(privateDNSName, ".")[0]
+			if dn != "" {
+				customHostName += "." + dn
+			}
 			if customHostName != privateDNSName {
 				addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalDNS, Address: customHostName})
 			}

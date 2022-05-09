@@ -176,7 +176,6 @@ func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition metav
 		s.providerStatus.InstanceState = instance.State.Name
 
 		domainNames, err := s.getCustomDomainFromDHCP(instance.VpcId)
-
 		if err != nil {
 			return err
 		}
@@ -227,5 +226,8 @@ func (s *machineScope) getCustomDomainFromDHCP(vpcID *string) ([]string, error) 
 			return strings.Split(*i.Values[0].Value, " "), nil
 		}
 	}
-	return nil, nil
+	// If we are here it means a valid DHCPOption exists but there is no DhcpConfiguration in it with the `dhcpDomainKeyName`
+	// this means the DHCPOption has an empty `domain-name`, which is a valid configuration for it.
+	// As such, we return it as a valid empty domain.
+	return []string{""}, nil
 }

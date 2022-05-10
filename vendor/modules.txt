@@ -272,7 +272,7 @@ github.com/openshift/client-go/machine/listers/machine/v1beta1
 ## explicit; go 1.17
 github.com/openshift/library-go/pkg/config/clusterstatus
 github.com/openshift/library-go/pkg/config/leaderelection
-# github.com/openshift/machine-api-operator v0.2.1-0.20220327131531-58ba8507d869
+# github.com/openshift/machine-api-operator v0.2.1-0.20220509160407-25e61c2d0120
 ## explicit; go 1.17
 github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics

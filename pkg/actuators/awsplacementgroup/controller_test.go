@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var _ = Describe("AWSPlacementGroupReconciler", func() {
+var _ = Describe("Reconciler", func() {
 	var mgrCancel context.CancelFunc
 	var mgrDone chan struct{}
 	var fakeRecorder *record.FakeRecorder

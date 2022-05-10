@@ -552,7 +552,7 @@ github.com/opencontainers/go-digest v1.0.0-rc1/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQ
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.0.1/go.mod h1:BtxoFyWECRxE4U/7sNtV5W15zMzWCbyJoFRP3s7yZA0=
 github.com/openshift/api v0.0.0-20211209135129-c58d9f695577/go.mod h1:DoslCwtqUpr3d/gsbq4ZlkaMEdYqKxuypsDjorcHhME=
-github.com/openshift/api v0.0.0-20220322000322-9c4998a4d646/go.mod h1:F/eU6jgr6Q2VhMu1mSpMmygxAELd7+BUxs3NHZ25jV4=
+github.com/openshift/api v0.0.0-20220427141643-6e7069f2fba2/go.mod h1:F/eU6jgr6Q2VhMu1mSpMmygxAELd7+BUxs3NHZ25jV4=
 github.com/openshift/api v0.0.0-20220429222041-b25f69a603a7 h1:G9EAAWcAzv2+eWN2wlpDQJ4OFbgkmfAg4ppzvE3k2xs=
 github.com/openshift/api v0.0.0-20220429222041-b25f69a603a7/go.mod h1:F/eU6jgr6Q2VhMu1mSpMmygxAELd7+BUxs3NHZ25jV4=
 github.com/openshift/build-machinery-go v0.0.0-20210712174854-1bb7fd1518d3/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
@@ -561,8 +561,8 @@ github.com/openshift/client-go v0.0.0-20211209144617-7385dd6338e3 h1:SG1aqwleU6b
 github.com/openshift/client-go v0.0.0-20211209144617-7385dd6338e3/go.mod h1:cwhyki5lqBmrT0m8Im+9I7PGFaraOzcYPtEz93RcsGY=
 github.com/openshift/library-go v0.0.0-20220121154930-b7889002d63e h1:XDK1ZB6Q1YmYkxfEkRq9z92yzinaJMf+vvjeELKj+2I=
 github.com/openshift/library-go v0.0.0-20220121154930-b7889002d63e/go.mod h1:6AmNM4N4nHftckybV/U7bQW+5AvK5TW81ndSI6KEidw=
-github.com/openshift/machine-api-operator v0.2.1-0.20220327131531-58ba8507d869 h1:G7N+af+J3NilP8kTJlW128hAUEB1bNXsUS2OaHy+hVg=
-github.com/openshift/machine-api-operator v0.2.1-0.20220327131531-58ba8507d869/go.mod h1:dTBGubZhh4kO4UmbcWPgO/uQHJY3qqmoOAeJdWHCxJc=
+github.com/openshift/machine-api-operator v0.2.1-0.20220509160407-25e61c2d0120 h1:qthMAiUUoMPeSy/pORFGZEy77buPlcSy3qlmasUlfgY=
+github.com/openshift/machine-api-operator v0.2.1-0.20220509160407-25e61c2d0120/go.mod h1:lgFgc9xKN4Wcb7ANiJ1fxCSUnFtrtjMYmJP1bBmFRiM=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
 github.com/operator-framework/operator-sdk v0.5.1-0.20190301204940-c2efe6f74e7b/go.mod h1:iVyukRkam5JZa8AnjYf+/G3rk7JI1+M6GsU0sq0B9NA=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
@@ -853,7 +853,6 @@ golang.org/x/net v0.0.0-20210520170846-37e1c6afe023/go.mod h1:9nx3DQGgdP8bBQD5qx
 golang.org/x/net v0.0.0-20210525063256-abc453219eb5/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
 golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
 golang.org/x/net v0.0.0-20210825183410-e898025ed96a/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
-golang.org/x/net v0.0.0-20211209124913-491a49abca63/go.mod h1:9nx3DQGgdP8bBQD5qxJ1jj9UTztislL4KSBs9R2vV5Y=
 golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd h1:O7DYs+zxREGLKzKoMQrtrEacpb0ZVXA5rIwylE2Xchk=
 golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd/go.mod h1:CfG3xpIq0wQ8r1q4Su4UZFWDARRcnwPjda9FqA0JpMk=
 golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=

@@ -7,7 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	machinev1 "github.com/openshift/api/machine/v1"
+	machinev1 "github.com/openshift/machine-api-provider-aws/pkg/api/machine/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -36,7 +36,7 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "pkg", "api", "machine", "v1")},
 		ErrorIfCRDPathMissing: true,
 	}
 

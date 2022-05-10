@@ -52,8 +52,9 @@ type Reconciler struct {
 	AWSClientBuilder    awsclient.AwsClientBuilderFuncType
 	ConfigManagedClient client.Client
 
-	recorder record.EventRecorder
-	scheme   *runtime.Scheme
+	regionCache awsclient.RegionCache
+	recorder    record.EventRecorder
+	scheme      *runtime.Scheme
 }
 
 // SetupWithManager creates a new controller for a manager.
@@ -112,7 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	awsClient, err := r.AWSClientBuilder(
 		r.Client, credentialsSecretName, awsPlacementGroup.Namespace,
-		infra.Status.PlatformStatus.AWS.Region, r.ConfigManagedClient)
+		infra.Status.PlatformStatus.AWS.Region, r.ConfigManagedClient, r.regionCache)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not create aws client: %w", err)
 	}

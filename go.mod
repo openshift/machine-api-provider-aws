@@ -10,7 +10,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.18.1
 	github.com/openshift/api v0.0.0-20220531073726-6c4f186339a7
-	github.com/openshift/machine-api-operator v0.2.1-0.20220601192856-d7fb6b5b87ef
+	github.com/openshift/machine-api-operator v0.2.1-0.20220608065814-f76a8f3ab734
 	k8s.io/api v0.24.1
 	k8s.io/apimachinery v0.24.1
 	k8s.io/client-go v0.24.1

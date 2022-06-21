@@ -93,7 +93,8 @@ func getSecurityGroupsIDs(securityGroups []machinev1beta1.AWSResourceReference, 
 	}
 
 	if len(securityGroups) == 0 {
-		klog.Info("No security group found")
+		klog.Error("No security group found")
+		return nil, fmt.Errorf("no security group found")
 	}
 
 	return securityGroupIDs, nil
@@ -391,7 +392,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		if _, ok := err.(awserr.Error); ok {
 			if reqErr, ok := err.(awserr.RequestFailure); ok {
 				if strings.HasPrefix(strconv.Itoa(reqErr.StatusCode()), "4") {
-					klog.Infof("Error launching instance: %v", reqErr)
+					klog.Errorf("Error launching instance: %v", reqErr)
 					return nil, mapierrors.InvalidMachineConfiguration("error launching instance: %v", reqErr.Message())
 				}
 			}

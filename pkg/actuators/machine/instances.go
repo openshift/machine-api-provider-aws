@@ -92,7 +92,7 @@ func getSecurityGroupsIDs(securityGroups []machinev1beta1.AWSResourceReference, 
 		}
 	}
 
-	if len(securityGroups) == 0 {
+	if len(securityGroupIDs) == 0 {
 		klog.Error("No security group found")
 		return nil, fmt.Errorf("no security group found")
 	}

@@ -9,8 +9,8 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.18.1
-	github.com/openshift/api v0.0.0-20220531073726-6c4f186339a7
-	github.com/openshift/machine-api-operator v0.2.1-0.20220608065814-f76a8f3ab734
+	github.com/openshift/api v0.0.0-20220628012702-9368b92de0ab
+	github.com/openshift/machine-api-operator v0.2.1-0.20220808213825-1c83be8e1625
 	k8s.io/api v0.24.1
 	k8s.io/apimachinery v0.24.1
 	k8s.io/client-go v0.24.1
@@ -68,7 +68,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
-	github.com/openshift/client-go v0.0.0-20220525160904-9e1acff93e4a // indirect
+	github.com/openshift/client-go v0.0.0-20220603133046-984ee5ebedcf // indirect
 	github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect

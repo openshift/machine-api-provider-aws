@@ -24,11 +24,14 @@ import (
 	. "github.com/onsi/gomega"
 	gtypes "github.com/onsi/gomega/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
+	fakeawsclient "github.com/openshift/machine-api-provider-aws/pkg/client/fake"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -39,14 +42,21 @@ var _ = Describe("MachineSetReconciler", func() {
 	var stopMgr context.CancelFunc
 	var fakeRecorder *record.FakeRecorder
 	var namespace *corev1.Namespace
+	fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
+	Expect(err).ToNot(HaveOccurred())
+	awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+		return fakeClient, nil
+	}
 
 	BeforeEach(func() {
 		mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
 		Expect(err).ToNot(HaveOccurred())
 
 		r := Reconciler{
-			Client: mgr.GetClient(),
-			Log:    log.Log,
+			Client:             mgr.GetClient(),
+			Log:                log.Log,
+			AwsClientBuilder:   awsClientBuilder,
+			InstanceTypesCache: NewInstanceTypesCache(),
 		}
 		Expect(r.SetupWithManager(mgr, controller.Options{})).To(Succeed())
 
@@ -265,8 +275,16 @@ func TestReconcile(t *testing.T) {
 			machineSet, err := newTestMachineSet("default", tc.instanceType, tc.existingAnnotations)
 			g.Expect(err).ToNot(HaveOccurred())
 
+			fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
+			Expect(err).ToNot(HaveOccurred())
+			awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+				return fakeClient, nil
+			}
+
 			r := Reconciler{
-				recorder: record.NewFakeRecorder(1),
+				recorder:           record.NewFakeRecorder(1),
+				AwsClientBuilder:   awsClientBuilder,
+				InstanceTypesCache: NewInstanceTypesCache(),
 			}
 
 			_, err = r.reconcile(machineSet)
@@ -285,6 +303,9 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 
 	machineProviderSpec := &machinev1beta1.AWSMachineProviderConfig{
 		InstanceType: instanceType,
+		CredentialsSecret: &corev1.LocalObjectReference{
+			Name: "test-credentials",
+		},
 	}
 	providerSpec, err := providerSpecFromMachine(machineProviderSpec)
 	if err != nil {

@@ -52,6 +52,7 @@ type ActuatorParams struct {
 	EventRecorder       record.EventRecorder
 	AwsClientBuilder    awsclient.AwsClientBuilderFuncType
 	ConfigManagedClient runtimeclient.Client
+	RegionCache         awsclient.RegionCache
 }
 
 // NewActuator returns an actuator.
@@ -61,7 +62,7 @@ func NewActuator(params ActuatorParams) *Actuator {
 		eventRecorder:       params.EventRecorder,
 		awsClientBuilder:    params.AwsClientBuilder,
 		configManagedClient: params.ConfigManagedClient,
-		regionCache:         awsclient.NewRegionCache(),
+		regionCache:         params.RegionCache,
 	}
 }
 

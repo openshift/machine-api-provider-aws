@@ -95,6 +95,74 @@ func (c *awsClient) DescribeInstances(input *ec2.DescribeInstancesInput) (*ec2.D
 	}, nil
 }
 
+func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
+	return &ec2.DescribeInstanceTypesOutput{
+		InstanceTypes: []*ec2.InstanceTypeInfo{
+			{
+				InstanceType: aws.String("m4.large"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(8192),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(2),
+				},
+			},
+			{
+				InstanceType: aws.String("a1.2xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(16384),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(8),
+				},
+			},
+			{
+				InstanceType: aws.String("p2.16xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(749568),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(64),
+				},
+				GpuInfo: &ec2.GpuInfo{
+					Gpus: []*ec2.GpuDeviceInfo{
+						{
+							Name:         aws.String("K80"),
+							Manufacturer: aws.String("NVIDIA"),
+							Count:        aws.Int64(16),
+							MemoryInfo: &ec2.GpuDeviceMemoryInfo{
+								SizeInMiB: aws.Int64(12288),
+							},
+						},
+					},
+					TotalGpuMemoryInMiB: aws.Int64(196608),
+				},
+			},
+			{
+				InstanceType: aws.String("g4ad.xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(16384),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(4),
+				},
+				GpuInfo: &ec2.GpuInfo{
+					Gpus: []*ec2.GpuDeviceInfo{
+						{
+							Name:         aws.String("Radeon Pro V520"),
+							Manufacturer: aws.String("AMD"),
+							Count:        aws.Int64(1),
+							MemoryInfo: &ec2.GpuDeviceMemoryInfo{
+								SizeInMiB: aws.Int64(8192),
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil
+}
+
 func (c *awsClient) TerminateInstances(input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
 	// Feel free to extend the returned values
 	return &ec2.TerminateInstancesOutput{}, nil

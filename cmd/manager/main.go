@@ -155,12 +155,14 @@ func main() {
 	}
 	mgr.Add(startCache)
 
+	describeRegionsCache := awsclient.NewRegionCache()
 	// Initialize machine actuator.
 	machineActuator := machineactuator.NewActuator(machineactuator.ActuatorParams{
 		Client:              mgr.GetClient(),
 		EventRecorder:       mgr.GetEventRecorderFor("awscontroller"),
 		AwsClientBuilder:    awsclient.NewValidatedClient,
 		ConfigManagedClient: configManagedClient,
+		RegionCache:         describeRegionsCache,
 	})
 
 	if err := machine.AddWithActuator(mgr, machineActuator); err != nil {
@@ -171,8 +173,12 @@ func main() {
 	setupLog := ctrl.Log.WithName("setup")
 
 	if err := (&machinesetcontroller.Reconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("MachineSet"),
+		Client:              mgr.GetClient(),
+		Log:                 ctrl.Log.WithName("controllers").WithName("MachineSet"),
+		AwsClientBuilder:    awsclient.NewValidatedClient,
+		RegionCache:         describeRegionsCache,
+		ConfigManagedClient: configManagedClient,
+		InstanceTypesCache:  machinesetcontroller.NewInstanceTypesCache(),
 	}).SetupWithManager(mgr, controller.Options{}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MachineSet")
 		os.Exit(1)

@@ -9,6 +9,7 @@ import (
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	utils "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
+	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,8 +31,12 @@ const (
 
 // Reconciler reconciles machineSets.
 type Reconciler struct {
-	Client client.Client
-	Log    logr.Logger
+	Client              client.Client
+	Log                 logr.Logger
+	AwsClientBuilder    awsclient.AwsClientBuilderFuncType
+	RegionCache         awsclient.RegionCache
+	ConfigManagedClient client.Client
+	InstanceTypesCache  InstanceTypesCache
 
 	recorder record.EventRecorder
 	scheme   *runtime.Scheme
@@ -106,13 +111,24 @@ func isInvalidConfigurationError(err error) bool {
 }
 
 func (r *Reconciler) reconcile(machineSet *machinev1beta1.MachineSet) (ctrl.Result, error) {
+	klog.V(3).Infof("%v: Reconciling MachineSet", machineSet.Name)
 	providerConfig, err := utils.ProviderSpecFromRawExtension(machineSet.Spec.Template.Spec.ProviderSpec.Value)
 	if err != nil {
 		return ctrl.Result{}, mapierrors.InvalidMachineConfiguration("failed to get providerConfig: %v", err)
 	}
-	instanceType, ok := InstanceTypes[providerConfig.InstanceType]
-	if !ok {
-		klog.Errorf("Unable to set scale from zero annotations: unknown instance type: %s", providerConfig.InstanceType)
+
+	if providerConfig.CredentialsSecret == nil {
+		return ctrl.Result{}, mapierrors.InvalidMachineConfiguration("nil credentialsSecret for machineSet %s", machineSet.Name)
+	}
+
+	awsClient, err := r.AwsClientBuilder(r.Client, providerConfig.CredentialsSecret.Name, machineSet.Namespace, providerConfig.Placement.Region, r.ConfigManagedClient, r.RegionCache)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error creating aws client: %w", err)
+	}
+
+	instanceType, err := r.InstanceTypesCache.GetInstanceType(awsClient, providerConfig.Placement.Region, providerConfig.InstanceType)
+	if err != nil {
+		klog.Errorf("Unable to set scale from zero annotations: unknown instance type %s: %v", providerConfig.InstanceType, err)
 		klog.Errorf("Autoscaling from zero will not work. To fix this, manually populate machine annotations for your instance type: %v", []string{cpuKey, memoryKey, gpuKey})
 
 		// Returning no error to prevent further reconciliation, as user intervention is now required but emit an informational event

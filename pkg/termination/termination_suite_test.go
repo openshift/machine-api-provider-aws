@@ -17,9 +17,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,11 +26,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-)
-
-const (
-	timeout = 10 * time.Second
 )
 
 var (
@@ -45,9 +39,7 @@ var (
 func TestReconciler(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Termination Handler Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "Termination Handler Suite")
 }
 
 var _ = BeforeSuite(func() {

@@ -8,7 +8,6 @@ approvers:
 - elmiko
 - lobziik
 reviewers:
-- Fedosin
 - JoelSpeed
 - RadekManak
 - damdo
@@ -16,4 +15,4 @@ reviewers:
 - lobziik
 - odvarkadaniel
 component: Cloud Compute
-subcomponent: Other Providers
+subcomponent: Other Provider

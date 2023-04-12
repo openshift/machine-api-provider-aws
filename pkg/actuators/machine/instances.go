@@ -105,6 +105,16 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 	// ID has priority
 	if subnet.ID != nil {
 		subnetIDs = append(subnetIDs, subnet.ID)
+
+		availabilityZoneFromSubnetID, err := getAvalabilityZoneFromSubnetID(availabilityZone, client)
+		if err != nil {
+			klog.Errorf("could not check if the subnet id and availability zone fields are mismatched")
+			return subnetIDs, nil
+		}
+
+		if availabilityZone != availabilityZoneFromSubnetID {
+			klog.Errorf("mismatched subnet id and availibity zone")
+		}
 	} else {
 		var filters []machinev1beta1.Filter
 		if availabilityZone != "" {
@@ -148,7 +158,32 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 	if len(subnetIDs) == 0 {
 		return nil, fmt.Errorf("no subnet IDs were found")
 	}
+
 	return subnetIDs, nil
+}
+
+// getAvalabilityZoneFromSubnetID gets an availability zone from specified subnet id.
+func getAvalabilityZoneFromSubnetID(subnetID string, client awsclient.Client) (string, error) {
+	result, err := client.DescribeSubnets(&ec2.DescribeSubnetsInput{
+		DryRun: aws.Bool(true),
+		SubnetIds: []*string{
+			aws.String(subnetID),
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not describe a subnet")
+	}
+
+	if result == nil {
+		return "", fmt.Errorf("resulting subnet is not expected to be nil")
+	}
+
+	if len(result.Subnets) > 0 {
+		availabilityZone := *result.Subnets[0].AvailabilityZone
+		return availabilityZone, nil
+	}
+
+	return "", fmt.Errorf("could not get an availability zone from a subnet id")
 }
 
 func getAMI(machine runtimeclient.ObjectKey, AMI machinev1beta1.AWSResourceReference, client awsclient.Client) (*string, error) {

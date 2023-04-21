@@ -846,7 +846,7 @@ func TestDelete(t *testing.T) {
 
 				return machine
 			},
-			expectedError: errors.New("failed to updated update load balancers: arn2: unauthorized"),
+			expectedError: errors.New("failed to remove instance from load balancers: arn2: unauthorized"),
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)

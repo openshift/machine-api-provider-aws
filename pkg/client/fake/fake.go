@@ -106,6 +106,11 @@ func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput)
 				VCpuInfo: &ec2.VCpuInfo{
 					DefaultVCpus: aws.Int64(2),
 				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("amd64"),
+					},
+				},
 			},
 			{
 				InstanceType: aws.String("a1.2xlarge"),
@@ -114,6 +119,11 @@ func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput)
 				},
 				VCpuInfo: &ec2.VCpuInfo{
 					DefaultVCpus: aws.Int64(8),
+				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("amd64"),
+					},
 				},
 			},
 			{
@@ -137,6 +147,11 @@ func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput)
 					},
 					TotalGpuMemoryInMiB: aws.Int64(196608),
 				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("amd64"),
+					},
+				},
 			},
 			{
 				InstanceType: aws.String("g4ad.xlarge"),
@@ -156,6 +171,50 @@ func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput)
 								SizeInMiB: aws.Int64(8192),
 							},
 						},
+					},
+				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("amd64"),
+					},
+				},
+			},
+			{
+				InstanceType: aws.String("m6g.4xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(65536),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(16),
+				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("arm64"),
+					},
+				},
+			},
+			{
+				// This instance type misses the specification of the CPU Architecture.
+				InstanceType: aws.String("m6i.8xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(131072),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(32),
+				},
+			},
+			{
+				// This instance type reports a wrong specification of the CPU Architecture.
+				InstanceType: aws.String("m6h.8xlarge"),
+				MemoryInfo: &ec2.MemoryInfo{
+					SizeInMiB: aws.Int64(131072),
+				},
+				VCpuInfo: &ec2.VCpuInfo{
+					DefaultVCpus: aws.Int64(32),
+				},
+				ProcessorInfo: &ec2.ProcessorInfo{
+					SupportedArchitectures: []*string{
+						aws.String("wrong-arch"),
 					},
 				},
 			},

@@ -24,12 +24,23 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// we define this additional type as the EC2 API returns the architecture in a different format than the one we use.
+type normalizedArch string
+
+const (
+	// ArchitectureAmd64 is the normalized architecture name for amd64.
+	ArchitectureAmd64 normalizedArch = "amd64"
+	// ArchitectureArm64 is the normalized architecture name for arm64.
+	ArchitectureArm64 normalizedArch = "arm64"
+)
+
 // InstanceType holds some of the instance type information that we need to store.
 type InstanceType struct {
-	InstanceType string
-	VCPU         int64
-	MemoryMb     int64
-	GPU          int64
+	InstanceType    string
+	VCPU            int64
+	MemoryMb        int64
+	GPU             int64
+	CPUArchitecture normalizedArch
 }
 
 // InstanceTypesCache is a cache for instance type information.
@@ -166,6 +177,12 @@ func transformInstanceType(rawInstanceType *ec2.InstanceTypeInfo) InstanceType {
 	if rawInstanceType.GpuInfo != nil && len(rawInstanceType.GpuInfo.Gpus) > 0 {
 		instanceType.GPU = getGpuCount(rawInstanceType.GpuInfo)
 	}
+	if rawInstanceType.ProcessorInfo != nil && len(rawInstanceType.ProcessorInfo.SupportedArchitectures) > 0 &&
+		rawInstanceType.ProcessorInfo.SupportedArchitectures[0] != nil && *rawInstanceType.ProcessorInfo.SupportedArchitectures[0] != "" {
+		instanceType.CPUArchitecture = normalizeArchitecture(*rawInstanceType.ProcessorInfo.SupportedArchitectures[0])
+	} else {
+		instanceType.CPUArchitecture = normalizeArchitecture("amd64")
+	}
 	return instanceType
 }
 
@@ -178,4 +195,21 @@ func getGpuCount(gpuInfo *ec2.GpuInfo) int64 {
 		}
 	}
 	return gpuCountSum
+}
+
+// normalizeArchitecture converts the given architecture string from the format used by the EC2 API to the one for kubernetes.
+// In particular, at the time of writing,
+// the EC2 API uses the GNU name for the x86_64 architecture, and the Golang/LLVM name for the aarch64.
+// The kubernetes.io/arch label expects the Golang/LLVM names.
+// See vendor/github.com/aws/aws-sdk-go/service/ec2/api.go
+func normalizeArchitecture(architecture string) normalizedArch {
+	switch architecture {
+	case ec2.ArchitectureTypeX8664:
+		return ArchitectureAmd64
+	case ec2.ArchitectureTypeArm64:
+		return ArchitectureArm64
+	}
+	klog.V(2).Infof("unknown architecture %s. Defaulting to amd64", architecture)
+	// Default to amd64 if we don't recognize the architecture.
+	return ArchitectureAmd64
 }

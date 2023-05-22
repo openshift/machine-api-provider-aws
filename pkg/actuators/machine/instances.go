@@ -106,7 +106,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 	if subnet.ID != nil {
 		subnetIDs = append(subnetIDs, subnet.ID)
 
-		availabilityZoneFromSubnetID, err := getAvalabilityZoneFromSubnetID(availabilityZone, client)
+		availabilityZoneFromSubnetID, err := getAvalabilityZoneFromSubnetID(*subnet.ID, client)
 		if err != nil {
 			klog.Errorf("could not check if the subnet id and availability zone fields are mismatched: %w", err)
 			return subnetIDs, nil
@@ -165,7 +165,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 // getAvalabilityZoneFromSubnetID gets an availability zone from specified subnet id.
 func getAvalabilityZoneFromSubnetID(subnetID string, client awsclient.Client) (string, error) {
 	result, err := client.DescribeSubnets(&ec2.DescribeSubnetsInput{
-		DryRun: aws.Bool(true),
+		DryRun: aws.Bool(false),
 		SubnetIds: []*string{
 			aws.String(subnetID),
 		},

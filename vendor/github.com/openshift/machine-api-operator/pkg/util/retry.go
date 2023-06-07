@@ -17,7 +17,6 @@ limitations under the License.
 package util
 
 import (
-	"context"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -48,11 +47,9 @@ func Retry(fn wait.ConditionFunc, initialBackoffSec int) error {
 }
 
 func Poll(interval, timeout time.Duration, condition wait.ConditionFunc) error {
-	ctx := context.Background()
-	return wait.PollUntilContextTimeout(ctx, interval, timeout, false, condition.WithContext())
+	return wait.Poll(interval, timeout, condition)
 }
 
 func PollImmediate(interval, timeout time.Duration, condition wait.ConditionFunc) error {
-	ctx := context.Background()
-	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, condition.WithContext())
+	return wait.PollImmediate(interval, timeout, condition)
 }

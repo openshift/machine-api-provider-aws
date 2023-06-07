@@ -120,10 +120,7 @@ func (f Formatter) Fi(indentation uint, format string, args ...interface{}) stri
 }
 
 func (f Formatter) Fiw(indentation uint, maxWidth uint, format string, args ...interface{}) string {
-	out := f.style(format)
-	if len(args) > 0 {
-		out = fmt.Sprintf(out, args...)
-	}
+	out := fmt.Sprintf(f.style(format), args...)
 
 	if indentation == 0 && maxWidth == 0 {
 		return out

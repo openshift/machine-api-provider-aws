@@ -93,10 +93,6 @@ type NodeTimeout time.Duration
 type SpecTimeout time.Duration
 type GracePeriod time.Duration
 
-func (l Labels) MatchesLabelFilter(query string) bool {
-	return types.MustParseLabelFilter(query)(l)
-}
-
 func UnionOfLabels(labels ...Labels) Labels {
 	out := Labels{}
 	seen := map[string]bool{}
@@ -873,15 +869,6 @@ func (n Nodes) FirstNodeMarkedOrdered() Node {
 		}
 	}
 	return Node{}
-}
-
-func (n Nodes) IndexOfFirstNodeMarkedOrdered() int {
-	for i := range n {
-		if n[i].MarkedOrdered {
-			return i
-		}
-	}
-	return -1
 }
 
 func (n Nodes) GetMaxFlakeAttempts() int {

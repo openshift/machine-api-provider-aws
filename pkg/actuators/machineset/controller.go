@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	"github.com/openshift/machine-api-operator/pkg/util"
 	utils "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ const (
 	cpuKey    = "machine.openshift.io/vCPU"
 	memoryKey = "machine.openshift.io/memoryMb"
 	gpuKey    = "machine.openshift.io/GPU"
+	labelsKey = "machine.openshift.io/labels"
 )
 
 // Reconciler reconciles machineSets.
@@ -144,6 +146,10 @@ func (r *Reconciler) reconcile(machineSet *machinev1beta1.MachineSet) (ctrl.Resu
 	machineSet.Annotations[cpuKey] = strconv.FormatInt(instanceType.VCPU, 10)
 	machineSet.Annotations[memoryKey] = strconv.FormatInt(instanceType.MemoryMb, 10)
 	machineSet.Annotations[gpuKey] = strconv.FormatInt(instanceType.GPU, 10)
-
+	// We guarantee that any existing labels provided via the capacity annotations are preserved.
+	// See https://github.com/kubernetes/autoscaler/pull/5382 and https://github.com/kubernetes/autoscaler/pull/5697
+	machineSet.Annotations[labelsKey] = util.MergeCommaSeparatedKeyValuePairs(
+		fmt.Sprintf("kubernetes.io/arch=%s", instanceType.CPUArchitecture),
+		machineSet.Annotations[labelsKey])
 	return ctrl.Result{}, nil
 }

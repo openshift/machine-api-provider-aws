@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/service/ec2"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gtypes "github.com/onsi/gomega/types"
@@ -125,6 +127,7 @@ var _ = Describe("MachineSetReconciler", func() {
 				cpuKey:    "8",
 				memoryKey: "16384",
 				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -135,6 +138,7 @@ var _ = Describe("MachineSetReconciler", func() {
 				cpuKey:    "64",
 				memoryKey: "749568",
 				gpuKey:    "16",
+				labelsKey: "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -150,6 +154,40 @@ var _ = Describe("MachineSetReconciler", func() {
 				cpuKey:     "8",
 				memoryKey:  "16384",
 				gpuKey:     "0",
+				labelsKey:  "kubernetes.io/arch=amd64",
+			},
+			expectedEvents: []string{},
+		}),
+		Entry("with a m6g.4xlarge (aarch64)", reconcileTestCase{
+			instanceType:        "m6g.4xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "16",
+				memoryKey: "65536",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=arm64",
+			},
+			expectedEvents: []string{},
+		}),
+		Entry("with an instance type missing the supported architecture (default to amd64)", reconcileTestCase{
+			instanceType:        "m6i.8xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "32",
+				memoryKey: "131072",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
+			},
+			expectedEvents: []string{},
+		}),
+		Entry("with an unrecognized supported architecture (default to amd64)", reconcileTestCase{
+			instanceType:        "m6h.8xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "32",
+				memoryKey: "131072",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -221,6 +259,7 @@ func TestReconcile(t *testing.T) {
 				cpuKey:    "8",
 				memoryKey: "16384",
 				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -232,6 +271,7 @@ func TestReconcile(t *testing.T) {
 				cpuKey:    "64",
 				memoryKey: "749568",
 				gpuKey:    "16",
+				labelsKey: "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -248,6 +288,7 @@ func TestReconcile(t *testing.T) {
 				cpuKey:     "8",
 				memoryKey:  "16384",
 				gpuKey:     "0",
+				labelsKey:  "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -263,6 +304,42 @@ func TestReconcile(t *testing.T) {
 				"annother": "existingAnnotation",
 			},
 			// Expect no error and only log entry in such case as we don't update instance types dynamically
+			expectErr: false,
+		},
+		{
+			name:                "with a m6g.4xlarge (aarch64)",
+			instanceType:        "m6g.4xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "16",
+				memoryKey: "65536",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=arm64",
+			},
+			expectErr: false,
+		},
+		{
+			name:                "with an instance type missing the supported architecture (default to amd64)",
+			instanceType:        "m6i.8xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "32",
+				memoryKey: "131072",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
+			},
+			expectErr: false,
+		},
+		{
+			name:                "with an unrecognized supported architecture (default to amd64)",
+			instanceType:        "m6h.8xlarge",
+			existingAnnotations: make(map[string]string),
+			expectedAnnotations: map[string]string{
+				cpuKey:    "32",
+				memoryKey: "131072",
+				gpuKey:    "0",
+				labelsKey: "kubernetes.io/arch=amd64",
+			},
 			expectErr: false,
 		},
 	}
@@ -289,6 +366,32 @@ func TestReconcile(t *testing.T) {
 			_, err = r.reconcile(machineSet)
 			g.Expect(err != nil).To(Equal(tc.expectErr))
 			g.Expect(machineSet.Annotations).To(Equal(tc.expectedAnnotations))
+		})
+	}
+}
+
+func TestNormalizeArchitecture(t *testing.T) {
+	testCases := []struct {
+		architecture string
+		expected     normalizedArch
+	}{
+		{
+			architecture: ec2.ArchitectureTypeX8664,
+			expected:     ArchitectureAmd64,
+		},
+		{
+			architecture: ec2.ArchitectureTypeArm64,
+			expected:     ArchitectureArm64,
+		},
+		{
+			architecture: "unknown",
+			expected:     ArchitectureAmd64,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.architecture, func(tt *testing.T) {
+			g := NewWithT(tt)
+			g.Expect(normalizeArchitecture(tc.architecture)).To(Equal(tc.expected))
 		})
 	}
 }

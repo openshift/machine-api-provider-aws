@@ -28,7 +28,7 @@ const (
 	cpuKey    = "machine.openshift.io/vCPU"
 	memoryKey = "machine.openshift.io/memoryMb"
 	gpuKey    = "machine.openshift.io/GPU"
-	labelsKey = "machine.openshift.io/labels"
+	labelsKey = "capacity.cluster-autoscaler.kubernetes.io/labels"
 )
 
 // Reconciler reconciles machineSets.

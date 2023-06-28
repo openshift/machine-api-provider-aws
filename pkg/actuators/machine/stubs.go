@@ -227,6 +227,12 @@ func stubDedicatedInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 	return pc
 }
 
+func stubInstancePlacementGroupName(placementGroupName string) *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.PlacementGroupName = placementGroupName
+	return pc
+}
+
 func stubEFANetworkInterfaceType() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.NetworkInterfaceType = machinev1beta1.AWSEFANetworkInterfaceType

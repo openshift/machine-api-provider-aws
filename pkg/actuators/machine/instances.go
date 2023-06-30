@@ -549,6 +549,10 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
 	}
 
+	if machineProviderConfig.PlacementGroupName != "" {
+		placement.GroupName = &machineProviderConfig.PlacementGroupName
+	}
+
 	instanceTenancy := machineProviderConfig.Placement.Tenancy
 	switch instanceTenancy {
 	case "":

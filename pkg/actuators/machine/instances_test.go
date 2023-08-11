@@ -484,7 +484,7 @@ func TestLaunchInstance(t *testing.T) {
 		infra               *configv1.Infrastructure
 	}{
 		{
-			name: "Security groups with filters",
+			name: "Security groups with a filter",
 			providerConfig: stubPCSecurityGroups(
 				[]machinev1beta1.AWSResourceReference{
 					{
@@ -538,6 +538,54 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			),
 			securityGroupErr: fmt.Errorf("error"),
+		},
+		{
+			name: "Security groups with 2 filters",
+			providerConfig: stubPCSecurityGroups(
+				[]machinev1beta1.AWSResourceReference{
+					{
+						Filters: []machinev1beta1.Filter{},
+					},
+				},
+			),
+			securityGroupOutput: &ec2.DescribeSecurityGroupsOutput{
+				SecurityGroups: []*ec2.SecurityGroup{
+					{
+						GroupId: aws.String("groupID1"),
+					},
+					{
+						GroupId: aws.String("groupID2"),
+					},
+				},
+			},
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			succeeds:        true,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups:                   []*string{aws.String("groupID1"), aws.String("groupID2")},
+					},
+				},
+				UserData: aws.String(""),
+			},
 		},
 		{
 			name: "No security group",

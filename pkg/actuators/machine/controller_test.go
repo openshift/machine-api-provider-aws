@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
@@ -67,8 +68,10 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 	{ // Set up manager, actuator and controller
 		log.Printf("Initialising manager, actuator and controller")
 		mgr, err := manager.New(cfg, manager.Options{
-			Scheme:             scheme.Scheme,
-			MetricsBindAddress: "0",
+			Scheme: scheme.Scheme,
+			Metrics: server.Options{
+				BindAddress: "0",
+			},
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 

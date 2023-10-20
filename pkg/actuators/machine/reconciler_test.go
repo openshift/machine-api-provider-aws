@@ -486,7 +486,7 @@ func TestCreate(t *testing.T) {
 		}
 		machine.Spec.ProviderSpec = machinev1beta1.ProviderSpec{Value: encodedProviderConfig}
 
-		fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, machine, tc.awsCredentialsSecret, tc.userDataSecret, stubInfraObject())
+		fakeClient := fake.NewClientBuilder().WithRuntimeObjects(machine, tc.awsCredentialsSecret, tc.userDataSecret, stubInfraObject()).Build()
 
 		machineScope, err := newMachineScope(machineScopeParams{
 			client:  fakeClient,
@@ -620,7 +620,7 @@ func TestExists(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject())
+			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
 
 			machineScope, err := newMachineScope(machineScopeParams{
 				client:  fakeClient,
@@ -729,8 +729,7 @@ func TestUpdate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject())
-
+			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
 			machineScope, err := newMachineScope(machineScopeParams{
 				client:  fakeClient,
 				machine: tc.machine(),
@@ -886,7 +885,7 @@ func TestDelete(t *testing.T) {
 			g := NewWithT(t)
 
 			ctrl := gomock.NewController(t)
-			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject())
+			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
 
 			machineScope, err := newMachineScope(machineScopeParams{
 				client:  fakeClient,
@@ -1023,7 +1022,7 @@ func TestGetMachineInstances(t *testing.T) {
 			machineCopy := machine.DeepCopy()
 			machineCopy.Status.ProviderStatus = awsStatusRaw
 
-			fakeClient := fake.NewFakeClientWithScheme(scheme.Scheme, machine, awsCredentialsSecret, userDataSecret)
+			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(machine, awsCredentialsSecret, userDataSecret).Build()
 			mockAWSClient := tc.awsClientFunc(ctrl)
 
 			machineScope, err := newMachineScope(machineScopeParams{

@@ -473,6 +473,7 @@ func TestLaunchInstance(t *testing.T) {
 		securityGroupErr    error
 		subnetOutput        *ec2.DescribeSubnetsOutput
 		subnetErr           error
+		zonesOutput         *ec2.DescribeAvailabilityZonesOutput
 		azErr               error
 		imageOutput         *ec2.DescribeImagesOutput
 		imageErr            error
@@ -499,6 +500,8 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -558,6 +561,8 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -630,13 +635,8 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig: stubPCSubnet(machinev1beta1.AWSResourceReference{
 				Filters: []machinev1beta1.Filter{},
 			}),
-			subnetOutput: &ec2.DescribeSubnetsOutput{
-				Subnets: []*ec2.Subnet{
-					{
-						SubnetId: aws.String("subnetID"),
-					},
-				},
-			},
+			subnetOutput:    stubDescribeSubnetsOutputDefault(),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -660,13 +660,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 aws.String("subnetID"),
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -687,7 +681,9 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig: stubPCSubnet(machinev1beta1.AWSResourceReference{
 				Filters: []machinev1beta1.Filter{},
 			}),
-			azErr: fmt.Errorf("error"),
+			subnetOutput: &ec2.DescribeSubnetsOutput{},
+			zonesOutput:  &ec2.DescribeAvailabilityZonesOutput{},
+			azErr:        fmt.Errorf("error"),
 		},
 		{
 			name: "AMI with filters",
@@ -707,6 +703,8 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -730,13 +728,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -783,13 +775,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 aws.String("subnetID"),
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -820,6 +806,8 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
@@ -843,13 +831,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -862,6 +844,8 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "Dedicated instance tenancy",
 			providerConfig: stubDedicatedInstanceTenancy(),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -883,13 +867,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -901,11 +879,23 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "Dedicated instance tenancy",
 			providerConfig: stubInvalidInstanceTenancy(),
+			subnetOutput: &ec2.DescribeSubnetsOutput{
+				Subnets: []*ec2.Subnet{
+					stubSubnet("subnetID", defaultAvailabilityZone),
+				},
+			},
+			zonesOutput: &ec2.DescribeAvailabilityZonesOutput{
+				AvailabilityZones: []*ec2.AvailabilityZone{
+					stubAvailabilityZone(defaultAvailabilityZone, "availability-zone"),
+				},
+			},
 		},
 		{
 			name:           "Attach infrastructure object tags",
 			providerConfig: providerConfig,
 			infra:          infra,
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -927,13 +917,7 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -945,6 +929,8 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig:  stubEFANetworkInterfaceType(),
 			succeeds:        true,
 			infra:           infra,
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -966,14 +952,8 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
-						InterfaceType: aws.String("efa"),
+						Groups:                   stubSecurityGroupsDefault,
+						InterfaceType:            aws.String("efa"),
 					},
 				},
 				UserData: aws.String(""),
@@ -984,6 +964,8 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig: stubInvalidNetworkInterfaceType(),
 			succeeds:       false,
 			infra:          infra,
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -1005,14 +987,8 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
-						InterfaceType: aws.String("efa"),
+						Groups:                   stubSecurityGroupsDefault,
+						InterfaceType:            aws.String("efa"),
 					},
 				},
 				UserData: aws.String(""),
@@ -1021,6 +997,8 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "With custom placement group name",
 			providerConfig: stubInstancePlacementGroupName("placement-group1"),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
 				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
@@ -1042,19 +1020,124 @@ func TestLaunchInstance(t *testing.T) {
 						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups: []*string{
-							aws.String("sg-00868b02fbe29de17"),
-							aws.String("sg-0a4658991dc5eb40a"),
-							aws.String("sg-009a70e28fa4ba84e"),
-							aws.String("sg-07323d56fb932c84c"),
-							aws.String("sg-08b1ffd32874d59a2"),
-						},
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
 				Placement: &ec2.Placement{
 					GroupName: aws.String("placement-group1"),
 				},
+			},
+		},
+		{
+			name: "Wavelength Zone with Public IP",
+			providerConfig: stubProviderConfigCustomized(&stubInput{
+				InstanceType: "m5d.2xlarge",
+				ZoneName:     defaultWavelengthZone,
+				IsPublic:     aws.Bool(true),
+			}),
+			subnetOutput:    stubDescribeSubnetsOutputWavelength(),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputWavelength(),
+			instancesOutput: stubReservationEdgeZones(stubAMIID, stubInstanceID, "192.168.0.10", defaultWavelengthZone),
+			succeeds:        true,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: aws.String("m5d.2xlarge"),
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
+						AssociateCarrierIpAddress: aws.Bool(true),
+						SubnetId:                  aws.String(stubSubnetID),
+						Groups:                    stubSecurityGroupsDefault,
+					},
+				},
+				UserData: aws.String(""),
+			},
+		},
+		{
+			name: "Wavelength Zone with Private IP",
+			providerConfig: stubProviderConfigCustomized(&stubInput{
+				InstanceType: "m5d.2xlarge",
+				ZoneName:     defaultWavelengthZone,
+				IsPublic:     aws.Bool(false),
+			}),
+			subnetOutput:    stubDescribeSubnetsOutputWavelength(),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputWavelength(),
+			instancesOutput: stubReservationEdgeZones(stubAMIID, stubInstanceID, "192.168.0.10", defaultWavelengthZone),
+			succeeds:        true,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: aws.String("m5d.2xlarge"),
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex: aws.Int64(providerConfig.DeviceIndex),
+						SubnetId:    aws.String(stubSubnetID),
+						Groups:      stubSecurityGroupsDefault,
+					},
+				},
+				UserData: aws.String(""),
+			},
+		},
+		{
+			name: "Regular Zone with Private IP",
+			providerConfig: stubProviderConfigCustomized(&stubInput{
+				ZoneName: defaultAvailabilityZone,
+				IsPublic: aws.Bool(false),
+			}),
+			subnetOutput:    stubDescribeSubnetsOutputDefault(),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			succeeds:        true,
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex: aws.Int64(providerConfig.DeviceIndex),
+						SubnetId:    aws.String(stubSubnetID),
+						Groups:      stubSecurityGroupsDefault,
+					},
+				},
+				UserData: aws.String(""),
 			},
 		},
 	}
@@ -1064,7 +1147,7 @@ func TestLaunchInstance(t *testing.T) {
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
 
 			mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any()).Return(tc.securityGroupOutput, tc.securityGroupErr).AnyTimes()
-			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(nil, tc.azErr).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(tc.zonesOutput, nil).AnyTimes()
 			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(tc.subnetOutput, tc.subnetErr).AnyTimes()
 			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
 			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
@@ -1358,6 +1441,69 @@ func TestCorrectExistingTags(t *testing.T) {
 			err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestGetAvalabilityZoneTypeFromZoneName(t *testing.T) {
+	type args struct {
+		zoneName    string
+		zonesOutput *ec2.DescribeAvailabilityZonesOutput
+	}
+	cases := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "get availability-zone",
+			args: args{
+				zoneName:    defaultAvailabilityZone,
+				zonesOutput: stubDescribeAvailabilityZonesOutputDefault(),
+			},
+			want: "availability-zone",
+		},
+		{
+			name: "get wavelength-zone",
+			args: args{
+				zoneName:    defaultWavelengthZone,
+				zonesOutput: stubDescribeAvailabilityZonesOutputWavelength(),
+			},
+			want: "wavelength-zone",
+		},
+		{
+			name: "no zone",
+			args: args{
+				zoneName:    defaultWavelengthZone,
+				zonesOutput: &ec2.DescribeAvailabilityZonesOutput{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty input",
+			args: args{
+				zoneName:    "",
+				zonesOutput: &ec2.DescribeAvailabilityZonesOutput{},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			mockCtrl := gomock.NewController(t)
+			mockAWSClient := mockaws.NewMockClient(mockCtrl)
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(tc.args.zonesOutput, nil).AnyTimes()
+
+			got, err := getAvalabilityZoneTypeFromZoneName(tc.args.zoneName, mockAWSClient)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("getAvalabilityZoneTypeFromZoneName() error = %v, wantErr %v", err, tc.wantErr)
+				return
+			}
+			if got != tc.want {
+				t.Errorf("getAvalabilityZoneTypeFromZoneName() = %v, want %v", got, tc.want)
 			}
 		})
 	}

@@ -48,7 +48,8 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 		mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
 		mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
 		mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
-		mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(&ec2.DescribeSubnetsOutput{}, nil).AnyTimes()
+		mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
 
 		// After create, we will assert that the instance doesn't exist for the first 3 times that the call is made
 		// - The first call is Exists, which will return that the instance does not exist

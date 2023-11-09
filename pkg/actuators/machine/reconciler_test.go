@@ -69,14 +69,36 @@ func TestAvailabilityZone(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// Stub for Availability Zones
+			stubAvailabilityzoneName := tc.availabilityZone
+			if stubAvailabilityzoneName == "" {
+				stubAvailabilityzoneName = "us-east-1a"
+			}
+			stubSubnetID := tc.subnet
+			if stubSubnetID == "" {
+				stubSubnetID = "subnet-b46032ec"
+			}
+			stubDescribeAvailabilityZonesOutput := &ec2.DescribeAvailabilityZonesOutput{
+				AvailabilityZones: []*ec2.AvailabilityZone{
+					stubAvailabilityZone(stubAvailabilityzoneName, defaultZoneType),
+				},
+			}
+			var stubDescribeSubnetsOutput *ec2.DescribeSubnetsOutput
+
 			// no load balancers tested
 			machinePc.LoadBalancers = nil
 
 			machinePc.Placement.AvailabilityZone = tc.availabilityZone
 			if tc.subnet == "" {
 				machinePc.Subnet.ID = nil
+				stubDescribeSubnetsOutput = &ec2.DescribeSubnetsOutput{}
 			} else {
 				machinePc.Subnet.ID = aws.String(tc.subnet)
+				stubDescribeSubnetsOutput = &ec2.DescribeSubnetsOutput{
+					Subnets: []*ec2.Subnet{
+						stubSubnet(stubSubnetID, stubAvailabilityzoneName),
+					},
+				}
 			}
 
 			config, err := RawExtensionFromProviderSpec(machinePc)
@@ -137,8 +159,8 @@ func TestAvailabilityZone(t *testing.T) {
 
 			mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
 			mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).AnyTimes()
-			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(nil, nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(&ec2.DescribeSubnetsOutput{}, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput, nil).AnyTimes()
 			mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
 			mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
 
@@ -184,7 +206,7 @@ func TestCreate(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockAWSClient := mockaws.NewMockClient(mockCtrl)
 	mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any()).Return(nil, fmt.Errorf("describeSecurityGroups error")).AnyTimes()
-	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(nil, fmt.Errorf("describeAvailabilityZones error")).AnyTimes()
+	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
 	mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(nil, fmt.Errorf("describeImages error")).AnyTimes()
 	mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"), nil).AnyTimes()
 	mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
@@ -197,7 +219,7 @@ func TestCreate(t *testing.T) {
 	mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, nil).AnyTimes()
 	mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
 	mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
-	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(&ec2.DescribeSubnetsOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
 
 	testCases := []struct {
 		testcase             string

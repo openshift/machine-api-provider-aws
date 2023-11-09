@@ -179,11 +179,33 @@ func getAvalabilityZoneFromSubnetID(subnetID string, client awsclient.Client) (s
 	}
 
 	if len(result.Subnets) > 0 {
-		availabilityZone := *result.Subnets[0].AvailabilityZone
+		availabilityZone := aws.StringValue(result.Subnets[0].AvailabilityZone)
 		return availabilityZone, nil
 	}
 
 	return "", fmt.Errorf("could not get an availability zone from a subnet id")
+}
+
+// getAvalabilityZoneTypeFromZoneName gets an availability zone type from specified zone name.
+func getAvalabilityZoneTypeFromZoneName(zoneName string, client awsclient.Client) (string, error) {
+
+	result, err := client.DescribeAvailabilityZones(&ec2.DescribeAvailabilityZonesInput{
+		DryRun:    aws.Bool(false),
+		ZoneNames: []*string{aws.String(zoneName)},
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not describe a zones: %w", err)
+	}
+
+	if result == nil {
+		return "", fmt.Errorf("resulting zones is not expected to be nil")
+	}
+
+	if len(result.AvailabilityZones) > 0 {
+		return aws.StringValue(result.AvailabilityZones[0].ZoneType), nil
+	}
+
+	return "", fmt.Errorf("could not get an availability zone type from a zone name")
 }
 
 func getAMI(machine runtimeclient.ObjectKey, AMI machinev1beta1.AWSResourceReference, client awsclient.Client) (*string, error) {
@@ -337,13 +359,32 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 	}
 
 	// build list of networkInterfaces (just 1 for now)
+	subnetID := subnetIDs[0]
 	var networkInterfaces = []*ec2.InstanceNetworkInterfaceSpecification{
 		{
-			DeviceIndex:              aws.Int64(machineProviderConfig.DeviceIndex),
-			AssociatePublicIpAddress: machineProviderConfig.PublicIP,
-			SubnetId:                 subnetIDs[0],
-			Groups:                   securityGroupsIDs,
+			DeviceIndex: aws.Int64(machineProviderConfig.DeviceIndex),
+			SubnetId:    subnetID,
+			Groups:      securityGroupsIDs,
 		},
+	}
+	// Public IP assignment is different in Wavelength Zones.
+	// AvailabilityZone and LocalZone uses InternetGateway.
+	// WavelengthZone uses Carrier Gateway.
+	if aws.BoolValue(machineProviderConfig.PublicIP) {
+		zoneName, err := getAvalabilityZoneFromSubnetID(*subnetID, awsClient)
+		if err != nil {
+			return nil, mapierrors.InvalidMachineConfiguration("error discoverying zone type: %v", err)
+		}
+		zoneType, err := getAvalabilityZoneTypeFromZoneName(zoneName, awsClient)
+		if err != nil {
+			return nil, mapierrors.InvalidMachineConfiguration("error discoverying zone type: %v", err)
+		}
+
+		if zoneType == "wavelength-zone" {
+			networkInterfaces[0].AssociateCarrierIpAddress = machineProviderConfig.PublicIP
+		} else {
+			networkInterfaces[0].AssociatePublicIpAddress = machineProviderConfig.PublicIP
+		}
 	}
 
 	switch machineProviderConfig.NetworkInterfaceType {

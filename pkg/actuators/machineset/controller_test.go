@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var _ = Describe("MachineSetReconciler", func() {
@@ -50,7 +51,10 @@ var _ = Describe("MachineSetReconciler", func() {
 	}
 
 	BeforeEach(func() {
-		mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: "0"})
+		mgr, err := manager.New(cfg, manager.Options{
+			Metrics: server.Options{
+				BindAddress: "0",
+			}})
 		Expect(err).ToNot(HaveOccurred())
 
 		r := Reconciler{

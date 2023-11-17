@@ -54,7 +54,7 @@ func TestUseCustomCABundle(t *testing.T) {
 			if tc.cm != nil {
 				resources = append(resources, tc.cm)
 			}
-			ctrlRuntimeClient := fake.NewFakeClientWithScheme(scheme, resources...)
+			ctrlRuntimeClient := fake.NewClientBuilder().WithRuntimeObjects(resources...).Build()
 			awsOptions := &session.Options{}
 			err := useCustomCABundle(awsOptions, ctrlRuntimeClient)
 			if err != nil {

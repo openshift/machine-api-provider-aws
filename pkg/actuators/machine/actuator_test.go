@@ -222,7 +222,8 @@ func TestMachineEvents(t *testing.T) {
 			mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
 			mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
 			mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(&ec2.DescribeSubnetsOutput{}, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
 
 			params := ActuatorParams{
 				Client:           k8sClient,

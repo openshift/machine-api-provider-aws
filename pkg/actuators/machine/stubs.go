@@ -19,6 +19,9 @@ import (
 const (
 	defaultNamespace         = "default"
 	defaultAvailabilityZone  = "us-east-1a"
+	defaultWavelengthZone    = "us-east-1-wl1-nyc-wlz-1"
+	defaultZoneType          = "availability-zone"
+	zoneTypeWavelength       = "wavelength-zone"
 	region                   = "us-east-1"
 	awsCredentialsSecretName = "aws-credentials-secret"
 	userDataSecretName       = "aws-actuator-user-data-secret"
@@ -28,7 +31,16 @@ const (
 	stubMachineName = "aws-actuator-testing-machine"
 	stubAMIID       = "ami-a9acbbd6"
 	stubInstanceID  = "i-02fcb933c5da7085c"
+	stubSubnetID    = "subnet-0e56b13a64ff8a941"
 )
+
+var stubSecurityGroupsDefault = []*string{
+	aws.String("sg-00868b02fbe29de17"),
+	aws.String("sg-0a4658991dc5eb40a"),
+	aws.String("sg-009a70e28fa4ba84e"),
+	aws.String("sg-07323d56fb932c84c"),
+	aws.String("sg-08b1ffd32874d59a2"),
+}
 
 const userDataBlob = `#cloud-config
 write_files:
@@ -40,6 +52,21 @@ write_files:
 runcmd:
 - [ cat, /root/node_bootstrap/node_settings.yaml]
 `
+
+type stubInput struct {
+	ZoneName     string
+	InstanceType string
+	IsPublic     *bool
+}
+
+func stubPCSecurityGroupsDefault() (groups []machinev1beta1.AWSResourceReference) {
+	for _, group := range stubSecurityGroupsDefault {
+		groups = append(groups, machinev1beta1.AWSResourceReference{
+			ID: group,
+		})
+	}
+	return
+}
 
 func stubProviderConfig() *machinev1beta1.AWSMachineProviderConfig {
 	return &machinev1beta1.AWSMachineProviderConfig{
@@ -69,14 +96,8 @@ func stubProviderConfig() *machinev1beta1.AWSMachineProviderConfig {
 			{Name: "host-type", Value: "master"},
 			{Name: "sub-host-type", Value: "default"},
 		},
-		SecurityGroups: []machinev1beta1.AWSResourceReference{
-			{ID: aws.String("sg-00868b02fbe29de17")},
-			{ID: aws.String("sg-0a4658991dc5eb40a")},
-			{ID: aws.String("sg-009a70e28fa4ba84e")},
-			{ID: aws.String("sg-07323d56fb932c84c")},
-			{ID: aws.String("sg-08b1ffd32874d59a2")},
-		},
-		PublicIP: aws.Bool(true),
+		SecurityGroups: stubPCSecurityGroupsDefault(),
+		PublicIP:       aws.Bool(true),
 		LoadBalancers: []machinev1beta1.LoadBalancerReference{
 			{
 				Name: "cluster-con",
@@ -203,6 +224,92 @@ func stubInstance(imageID, instanceID string, setIP bool) *ec2.Instance {
 	}
 }
 
+func stubAvailabilityZone(zoneName, zoneType string) *ec2.AvailabilityZone {
+	zName := defaultAvailabilityZone
+	if zoneName != "" {
+		zName = zoneName
+	}
+	zType := defaultZoneType
+	if zoneType != "" {
+		zType = zoneType
+	}
+	return &ec2.AvailabilityZone{
+		ZoneName: aws.String(zName),
+		ZoneType: aws.String(zType),
+	}
+}
+
+func stubDescribeAvailabilityZonesOutputDefault() *ec2.DescribeAvailabilityZonesOutput {
+	return &ec2.DescribeAvailabilityZonesOutput{
+		AvailabilityZones: []*ec2.AvailabilityZone{
+			stubAvailabilityZone(defaultAvailabilityZone, defaultZoneType),
+		},
+	}
+}
+
+func stubDescribeAvailabilityZonesOutputWavelength() *ec2.DescribeAvailabilityZonesOutput {
+	return &ec2.DescribeAvailabilityZonesOutput{
+		AvailabilityZones: []*ec2.AvailabilityZone{
+			stubAvailabilityZone(defaultWavelengthZone, zoneTypeWavelength),
+		},
+	}
+}
+
+func stubDescribeAvailabilityZonesOutput() *ec2.DescribeAvailabilityZonesOutput {
+	return &ec2.DescribeAvailabilityZonesOutput{
+		AvailabilityZones: []*ec2.AvailabilityZone{
+			stubAvailabilityZone("", ""),
+		},
+	}
+}
+
+func stubSubnet(subnetID, zoneName string) *ec2.Subnet {
+	zName := defaultAvailabilityZone
+	if zoneName != "" {
+		zName = zoneName
+	}
+	sID := stubSubnetID
+	if subnetID != "" {
+		sID = subnetID
+	}
+	return &ec2.Subnet{
+		SubnetId:         aws.String(sID),
+		AvailabilityZone: aws.String(zName),
+	}
+}
+
+func stubDescribeSubnetsOutput() *ec2.DescribeSubnetsOutput {
+	return &ec2.DescribeSubnetsOutput{
+		Subnets: []*ec2.Subnet{
+			stubSubnet("", ""),
+		},
+	}
+}
+
+func stubDescribeSubnetsOutputDefault() *ec2.DescribeSubnetsOutput {
+	return &ec2.DescribeSubnetsOutput{
+		Subnets: []*ec2.Subnet{
+			stubSubnet("subnetID", defaultAvailabilityZone),
+		},
+	}
+}
+
+func stubDescribeSubnetsOutputProvided(subnetID string) *ec2.DescribeSubnetsOutput {
+	return &ec2.DescribeSubnetsOutput{
+		Subnets: []*ec2.Subnet{
+			stubSubnet(subnetID, defaultAvailabilityZone),
+		},
+	}
+}
+
+func stubDescribeSubnetsOutputWavelength() *ec2.DescribeSubnetsOutput {
+	return &ec2.DescribeSubnetsOutput{
+		Subnets: []*ec2.Subnet{
+			stubSubnet(stubSubnetID, defaultWavelengthZone),
+		},
+	}
+}
+
 func stubPCSecurityGroups(groups []machinev1beta1.AWSResourceReference) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.SecurityGroups = groups
@@ -218,6 +325,26 @@ func stubPCSubnet(subnet machinev1beta1.AWSResourceReference) *machinev1beta1.AW
 func stubPCAMI(ami machinev1beta1.AWSResourceReference) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.AMI = ami
+	return pc
+}
+
+func stubProviderConfigCustomized(in *stubInput) *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+
+	if in.InstanceType != "" {
+		pc.InstanceType = in.InstanceType
+	}
+
+	if in.IsPublic != nil {
+		pc.PublicIP = in.IsPublic
+	}
+
+	if in.ZoneName != "" {
+		pc.Placement = machinev1beta1.Placement{
+			Region:           region,
+			AvailabilityZone: in.ZoneName,
+		}
+	}
 	return pc
 }
 
@@ -306,6 +433,26 @@ func stubReservation(imageID, instanceID string, privateIP string) *ec2.Reservat
 				LaunchTime: aws.Time(time.Now()),
 				Placement: &ec2.Placement{
 					AvailabilityZone: &az,
+				},
+				PrivateIpAddress: aws.String(privateIP),
+			},
+		},
+	}
+}
+
+func stubReservationEdgeZones(ami, iid, privateIP, zoneName string) *ec2.Reservation {
+	return &ec2.Reservation{
+		Instances: []*ec2.Instance{
+			{
+				ImageId:    aws.String(ami),
+				InstanceId: aws.String(iid),
+				State: &ec2.InstanceState{
+					Name: aws.String(ec2.InstanceStateNamePending),
+					Code: aws.Int64(16),
+				},
+				LaunchTime: aws.Time(time.Now()),
+				Placement: &ec2.Placement{
+					AvailabilityZone: aws.String(zoneName),
 				},
 				PrivateIpAddress: aws.String(privateIP),
 			},

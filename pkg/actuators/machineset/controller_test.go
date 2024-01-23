@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	gtypes "github.com/onsi/gomega/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	util "github.com/openshift/machine-api-operator/pkg/util/machineset"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	fakeawsclient "github.com/openshift/machine-api-provider-aws/pkg/client/fake"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -46,7 +46,7 @@ var _ = Describe("MachineSetReconciler", func() {
 	var namespace *corev1.Namespace
 	fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
 	Expect(err).ToNot(HaveOccurred())
-	awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+	awsClientBuilder := func(client client.Client, secretName, namespace, region string, configManagedClient client.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 		return fakeClient, nil
 	}
 
@@ -128,10 +128,11 @@ var _ = Describe("MachineSetReconciler", func() {
 			instanceType:        "a1.2xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "8",
-				memoryKey: "16384",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "8",
+				util.MemoryKey:   "16384",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -139,10 +140,11 @@ var _ = Describe("MachineSetReconciler", func() {
 			instanceType:        "p2.16xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "64",
-				memoryKey: "749568",
-				gpuKey:    "16",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "64",
+				util.MemoryKey:   "749568",
+				util.GpuCountKey: "16",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -153,12 +155,13 @@ var _ = Describe("MachineSetReconciler", func() {
 				"annother": "existingAnnotation",
 			},
 			expectedAnnotations: map[string]string{
-				"existing": "annotation",
-				"annother": "existingAnnotation",
-				cpuKey:     "8",
-				memoryKey:  "16384",
-				gpuKey:     "0",
-				labelsKey:  "kubernetes.io/arch=amd64",
+				"existing":       "annotation",
+				"annother":       "existingAnnotation",
+				util.CpuKey:      "8",
+				util.MemoryKey:   "16384",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -166,10 +169,11 @@ var _ = Describe("MachineSetReconciler", func() {
 			instanceType:        "m6g.4xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "16",
-				memoryKey: "65536",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=arm64",
+				util.CpuKey:      "16",
+				util.MemoryKey:   "65536",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=arm64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -177,10 +181,11 @@ var _ = Describe("MachineSetReconciler", func() {
 			instanceType:        "m6i.8xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "32",
-				memoryKey: "131072",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "32",
+				util.MemoryKey:   "131072",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -188,10 +193,11 @@ var _ = Describe("MachineSetReconciler", func() {
 			instanceType:        "m6h.8xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "32",
-				memoryKey: "131072",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "32",
+				util.MemoryKey:   "131072",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectedEvents: []string{},
 		}),
@@ -260,10 +266,11 @@ func TestReconcile(t *testing.T) {
 			instanceType:        "a1.2xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "8",
-				memoryKey: "16384",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "8",
+				util.MemoryKey:   "16384",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -272,10 +279,11 @@ func TestReconcile(t *testing.T) {
 			instanceType:        "p2.16xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "64",
-				memoryKey: "749568",
-				gpuKey:    "16",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "64",
+				util.MemoryKey:   "749568",
+				util.GpuCountKey: "16",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -287,12 +295,13 @@ func TestReconcile(t *testing.T) {
 				"annother": "existingAnnotation",
 			},
 			expectedAnnotations: map[string]string{
-				"existing": "annotation",
-				"annother": "existingAnnotation",
-				cpuKey:     "8",
-				memoryKey:  "16384",
-				gpuKey:     "0",
-				labelsKey:  "kubernetes.io/arch=amd64",
+				"existing":       "annotation",
+				"annother":       "existingAnnotation",
+				util.CpuKey:      "8",
+				util.MemoryKey:   "16384",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -315,10 +324,11 @@ func TestReconcile(t *testing.T) {
 			instanceType:        "m6g.4xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "16",
-				memoryKey: "65536",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=arm64",
+				util.CpuKey:      "16",
+				util.MemoryKey:   "65536",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=arm64",
 			},
 			expectErr: false,
 		},
@@ -327,10 +337,11 @@ func TestReconcile(t *testing.T) {
 			instanceType:        "m6i.8xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "32",
-				memoryKey: "131072",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "32",
+				util.MemoryKey:   "131072",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -339,10 +350,11 @@ func TestReconcile(t *testing.T) {
 			instanceType:        "m6h.8xlarge",
 			existingAnnotations: make(map[string]string),
 			expectedAnnotations: map[string]string{
-				cpuKey:    "32",
-				memoryKey: "131072",
-				gpuKey:    "0",
-				labelsKey: "kubernetes.io/arch=amd64",
+				util.CpuKey:      "32",
+				util.MemoryKey:   "131072",
+				util.GpuCountKey: "0",
+				util.GpuTypeKey:  util.GpuNvidiaType,
+				labelsKey:        "kubernetes.io/arch=amd64",
 			},
 			expectErr: false,
 		},
@@ -357,7 +369,7 @@ func TestReconcile(t *testing.T) {
 
 			fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
 			Expect(err).ToNot(HaveOccurred())
-			awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+			awsClientBuilder := func(client client.Client, secretName, namespace, region string, configManagedClient client.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 				return fakeClient, nil
 			}
 

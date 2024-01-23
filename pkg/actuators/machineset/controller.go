@@ -9,6 +9,7 @@ import (
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/util"
+	annotationsutil "github.com/openshift/machine-api-operator/pkg/util/machineset"
 	utils "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
@@ -22,12 +23,6 @@ import (
 )
 
 const (
-	// This exposes compute information based on the providerSpec input.
-	// This is needed by the autoscaler to foresee upcoming capacity when scaling from zero.
-	// https://github.com/openshift/enhancements/pull/186
-	cpuKey    = "machine.openshift.io/vCPU"
-	memoryKey = "machine.openshift.io/memoryMb"
-	gpuKey    = "machine.openshift.io/GPU"
 	labelsKey = "capacity.cluster-autoscaler.kubernetes.io/labels"
 )
 
@@ -131,7 +126,7 @@ func (r *Reconciler) reconcile(machineSet *machinev1beta1.MachineSet) (ctrl.Resu
 	instanceType, err := r.InstanceTypesCache.GetInstanceType(awsClient, providerConfig.Placement.Region, providerConfig.InstanceType)
 	if err != nil {
 		klog.Errorf("Unable to set scale from zero annotations: unknown instance type %s: %v", providerConfig.InstanceType, err)
-		klog.Errorf("Autoscaling from zero will not work. To fix this, manually populate machine annotations for your instance type: %v", []string{cpuKey, memoryKey, gpuKey})
+		klog.Errorf("Autoscaling from zero will not work. To fix this, manually populate machine annotations for your instance type: %v", []string{annotationsutil.CpuKey, annotationsutil.MemoryKey, annotationsutil.GpuCountKey})
 
 		// Returning no error to prevent further reconciliation, as user intervention is now required but emit an informational event
 		r.recorder.Eventf(machineSet, corev1.EventTypeWarning, "FailedUpdate", "Failed to set autoscaling from zero annotations, instance type unknown")
@@ -142,10 +137,12 @@ func (r *Reconciler) reconcile(machineSet *machinev1beta1.MachineSet) (ctrl.Resu
 		machineSet.Annotations = make(map[string]string)
 	}
 
-	// TODO: get annotations keys from machine API
-	machineSet.Annotations[cpuKey] = strconv.FormatInt(instanceType.VCPU, 10)
-	machineSet.Annotations[memoryKey] = strconv.FormatInt(instanceType.MemoryMb, 10)
-	machineSet.Annotations[gpuKey] = strconv.FormatInt(instanceType.GPU, 10)
+	machineSet.Annotations = annotationsutil.SetCpuAnnotation(machineSet.Annotations, strconv.FormatInt(instanceType.VCPU, 10))
+	machineSet.Annotations = annotationsutil.SetMemoryAnnotation(machineSet.Annotations, strconv.FormatInt(instanceType.MemoryMb, 10))
+	machineSet.Annotations = annotationsutil.SetGpuCountAnnotation(machineSet.Annotations, strconv.FormatInt(instanceType.GPU, 10))
+	// TODO: We currently only support nvidia as GPU type. Once proper GPU types are introduced, we
+	// can pass the value in the second argument of the function SetGpuTypeAnnotation.
+	machineSet.Annotations = annotationsutil.SetGpuTypeAnnotation(machineSet.Annotations, annotationsutil.GpuNvidiaType)
 	// We guarantee that any existing labels provided via the capacity annotations are preserved.
 	// See https://github.com/kubernetes/autoscaler/pull/5382 and https://github.com/kubernetes/autoscaler/pull/5697
 	machineSet.Annotations[labelsKey] = util.MergeCommaSeparatedKeyValuePairs(

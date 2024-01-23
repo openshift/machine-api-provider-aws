@@ -282,12 +282,13 @@ github.com/openshift/client-go/machine/listers/machine/v1beta1
 ## explicit; go 1.20
 github.com/openshift/library-go/pkg/config/clusterstatus
 github.com/openshift/library-go/pkg/config/leaderelection
-# github.com/openshift/machine-api-operator v0.2.1-0.20230531233206-931f6f67c1c7
+# github.com/openshift/machine-api-operator v0.2.1-0.20231107142306-efda8d50967a
 ## explicit; go 1.19
 github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics
 github.com/openshift/machine-api-operator/pkg/util
 github.com/openshift/machine-api-operator/pkg/util/conditions
+github.com/openshift/machine-api-operator/pkg/util/machineset
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 ## explicit
 github.com/peterbourgon/diskv

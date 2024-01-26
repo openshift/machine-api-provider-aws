@@ -108,7 +108,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 
 		availabilityZoneFromSubnetID, err := getAvalabilityZoneFromSubnetID(*subnet.ID, client)
 		if err != nil {
-			klog.Errorf("could not check if the subnet id and availability zone fields are mismatched: %w", err)
+			klog.Errorf("could not check if the subnet id and availability zone fields are mismatched: %v", err)
 			return subnetIDs, nil
 		}
 

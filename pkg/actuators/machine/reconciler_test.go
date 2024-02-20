@@ -636,6 +636,25 @@ func TestExists(t *testing.T) {
 				return mockAWSClient
 			},
 		},
+		{
+			name: "Successfully find terminated instance",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			existsResult:  false,
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameTerminated, "1.1.1.1"), nil).AnyTimes()
+				return mockAWSClient
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -900,6 +919,24 @@ func TestDelete(t *testing.T) {
 				return mockAWSClient
 			},
 		},
+		{
+			name: "Does not try to delete an instance if it's already in a terminated state",
+			machine: func() *machinev1beta1.Machine {
+				machine, err := stubMachine()
+				if err != nil {
+					t.Fatalf("unable to build stub machine: %v", err)
+				}
+
+				return machine
+			},
+			expectedError: nil,
+			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
+				mockCtrl := gomock.NewController(t)
+				mockAWSClient := mockaws.NewMockClient(mockCtrl)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameTerminated, "1.1.1.1"), nil).Times(1)
+				return mockAWSClient
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1005,29 +1042,16 @@ func TestGetMachineInstances(t *testing.T) {
 			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
 				mockAWSClient := mockaws.NewMockClient(ctrl)
 
-				first := mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
+				mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
 					InstanceIds: aws.StringSlice([]string{instanceID}),
 				}).Return(
 					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameTerminated, "192.168.0.10"),
 					nil,
 				).Times(1)
 
-				mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
-					Filters: []*ec2.Filter{
-						{
-							Name:   awsTagFilter("Name"),
-							Values: aws.StringSlice([]string{machine.Name}),
-						},
-
-						clusterFilter(clusterID),
-					},
-				}).Return(
-					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameTerminated, "192.168.0.10"),
-					nil,
-				).Times(1).After(first)
-
 				return mockAWSClient
 			},
+			exists: true,
 		},
 	}
 

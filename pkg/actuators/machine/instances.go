@@ -118,7 +118,7 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 				metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 					Name:      machine.Name,
 					Namespace: machine.Namespace,
-					Reason:    err.Error(),
+					Reason:    "error describing availability zones",
 				})
 				klog.Errorf("error describing availability zones: %v", err)
 				return nil, fmt.Errorf("error describing availability zones: %v", err)
@@ -135,9 +135,9 @@ func getSubnetIDs(machine runtimeclient.ObjectKey, subnet machinev1beta1.AWSReso
 			metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 				Name:      machine.Name,
 				Namespace: machine.Namespace,
-				Reason:    err.Error(),
+				Reason:    "error describing subnets",
 			})
-			klog.Errorf("error describing subnetes: %v", err)
+			klog.Errorf("error describing subnets: %v", err)
 			return nil, fmt.Errorf("error describing subnets: %v", err)
 		}
 		for _, n := range describeSubnetResult.Subnets {
@@ -167,7 +167,7 @@ func getAMI(machine runtimeclient.ObjectKey, AMI machinev1beta1.AWSResourceRefer
 			metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 				Name:      machine.Name,
 				Namespace: machine.Namespace,
-				Reason:    err.Error(),
+				Reason:    "error describing AMI",
 			})
 			klog.Errorf("error describing AMI: %v", err)
 			return nil, fmt.Errorf("error describing AMI: %v", err)
@@ -214,7 +214,7 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 		metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 			Name:      machine.Name,
 			Namespace: machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "error describing AMI",
 		})
 		klog.Errorf("Error describing AMI: %v", err)
 		return nil, fmt.Errorf("error describing AMI: %v", err)
@@ -383,7 +383,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 			Name:      machine.Name,
 			Namespace: machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "error creating EC2 instance",
 		})
 		// we return InvalidMachineConfiguration for 4xx errors which by convention signal client misconfiguration
 		// https://tools.ietf.org/html/rfc2616#section-6.1.1

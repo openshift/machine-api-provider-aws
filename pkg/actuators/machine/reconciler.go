@@ -101,9 +101,9 @@ func (r *Reconciler) create() error {
 		metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "failed to update load balancers",
 		})
-		return fmt.Errorf("failed to updated update load balancers: %w", err)
+		return fmt.Errorf("failed to update load balancers: %w", err)
 	}
 
 	klog.Infof("Created Machine %v", r.machine.Name)
@@ -128,7 +128,7 @@ func (r *Reconciler) delete() error {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "error getting existing instances",
 		})
 		klog.Errorf("%s: error getting existing instances: %v", r.machine.Name, err)
 		return err
@@ -145,9 +145,9 @@ func (r *Reconciler) delete() error {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "failed to remove instance from load balancers",
 		})
-		return fmt.Errorf("failed to updated update load balancers: %w", err)
+		return fmt.Errorf("failed to remove instance from load balancers: %w", err)
 	}
 
 	terminatingInstances, err := terminateInstances(r.awsClient, existingInstances)
@@ -155,7 +155,7 @@ func (r *Reconciler) delete() error {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "failed to delete instances",
 		})
 		return fmt.Errorf("failed to delete instaces: %w", err)
 	}
@@ -189,7 +189,7 @@ func (r *Reconciler) update() error {
 		metrics.RegisterFailedInstanceUpdate(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "error getting existing instances",
 		})
 		klog.Errorf("%s: error getting existing instances: %v", r.machine.Name, err)
 		return err
@@ -242,9 +242,9 @@ func (r *Reconciler) update() error {
 			metrics.RegisterFailedInstanceUpdate(&metrics.MachineLabels{
 				Name:      r.machine.Name,
 				Namespace: r.machine.Namespace,
-				Reason:    err.Error(),
+				Reason:    "failed to update load balancers",
 			})
-			return fmt.Errorf("failed to updated update load balancers: %w", err)
+			return fmt.Errorf("failed to update load balancers: %w", err)
 		}
 	} else {
 		// Didn't find any running instances, just newest existing one.
@@ -281,7 +281,7 @@ func (r *Reconciler) exists() (bool, error) {
 		metrics.RegisterFailedInstanceUpdate(&metrics.MachineLabels{
 			Name:      r.machine.Name,
 			Namespace: r.machine.Namespace,
-			Reason:    err.Error(),
+			Reason:    "error getting existing instances",
 		})
 		klog.Errorf("%s: error getting existing instances: %v", r.machine.Name, err)
 		return false, err

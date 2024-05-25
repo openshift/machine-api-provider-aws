@@ -1,8 +1,8 @@
 module github.com/openshift/machine-api-provider-aws
 
-go 1.21
+go 1.22
 
-toolchain go1.21.0
+toolchain go1.22.1
 
 require (
 	github.com/aws/aws-sdk-go v1.50.0

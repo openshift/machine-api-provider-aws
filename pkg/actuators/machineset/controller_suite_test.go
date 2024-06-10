@@ -47,7 +47,7 @@ func TestReconciler(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1", "zz_generated.crd-manifests", "0000_10_machine-api_01_machinesets-CustomNoUpgrade.crd.yaml")},
 	}
 	machinev1beta1.AddToScheme(scheme.Scheme)
 

@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog/v2/klogr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -28,6 +30,8 @@ func init() {
 	machinev1beta1.AddToScheme(scheme.Scheme)
 	machinev1.Install(scheme.Scheme)
 	configv1.AddToScheme(scheme.Scheme)
+
+	ctrl.SetLogger(klogr.New())
 }
 
 func TestMachineEvents(t *testing.T) {
@@ -148,6 +152,13 @@ func TestMachineEvents(t *testing.T) {
 			gs.Expect(err).ToNot(HaveOccurred())
 			gs.Expect(stubMachine).ToNot(BeNil())
 
+			// Clean up events to make sure we have a clean slate.
+			eventList := &v1.EventList{}
+			gs.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+			for i := range eventList.Items {
+				gs.Expect(k8sClient.Delete(ctx, &eventList.Items[i])).To(Succeed())
+			}
+
 			// Create the machine
 			gs.Expect(k8sClient.Create(ctx, machine)).To(Succeed())
 			defer func() {
@@ -233,9 +244,8 @@ func TestMachineEvents(t *testing.T) {
 			actuator := NewActuator(params)
 			tc.operation(actuator, machine)
 
-			eventList := &v1.EventList{}
-			waitForEvent := func() error {
-				gs.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+			waitForEvent := func(g Gomega) error {
+				g.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
 				if len(eventList.Items) != 1 {
 					errorMsg := fmt.Sprintf("Expected len 1, got %d", len(eventList.Items))
 					return errors.New(errorMsg)
@@ -246,10 +256,6 @@ func TestMachineEvents(t *testing.T) {
 			gs.Eventually(waitForEvent, timeout).Should(Succeed())
 
 			gs.Expect(eventList.Items[0].Message).To(Equal(tc.event))
-
-			for i := range eventList.Items {
-				gs.Expect(k8sClient.Delete(ctx, &eventList.Items[i])).To(Succeed())
-			}
 		})
 	}
 }

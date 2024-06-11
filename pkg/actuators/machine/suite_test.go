@@ -31,9 +31,9 @@ var (
 func TestMain(m *testing.M) {
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1"),
-			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1"),
-			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "config", "v1"),
+			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1", "zz_generated.crd-manifests", "0000_10_machine-api_01_machines-CustomNoUpgrade.crd.yaml"),
+			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1", "zz_generated.crd-manifests", "0000_10_control-plane-machine-set_01_controlplanemachinesets-CustomNoUpgrade.crd.yaml"),
+			filepath.Join("..", "..", "..", "vendor", "github.com", "openshift", "api", "config", "v1", "zz_generated.crd-manifests", "0000_10_config-operator_01_infrastructures-CustomNoUpgrade.crd.yaml"),
 		},
 	}
 

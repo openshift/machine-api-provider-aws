@@ -122,7 +122,7 @@ func (r *Reconciler) create() error {
 func (r *Reconciler) delete() error {
 	klog.Infof("%s: deleting machine", r.machine.Name)
 
-	// Get all instances not terminated.
+	// Get all instances (including terminated, so that we can handle a terminated state)
 	existingInstances, err := r.getMachineInstances()
 	if err != nil {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
@@ -141,23 +141,29 @@ func (r *Reconciler) delete() error {
 		return nil
 	}
 
-	if err = r.removeFromLoadBalancers(existingInstances); err != nil {
-		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
-			Name:      r.machine.Name,
-			Namespace: r.machine.Namespace,
-			Reason:    "failed to remove instance from load balancers",
-		})
-		return fmt.Errorf("failed to remove instance from load balancers: %w", err)
-	}
+	isTerminated := r.checkIfInstanceTerminated(existingInstances[0])
+	var terminatingInstances []*ec2.InstanceStateChange
 
-	terminatingInstances, err := terminateInstances(r.awsClient, existingInstances)
-	if err != nil {
-		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
-			Name:      r.machine.Name,
-			Namespace: r.machine.Namespace,
-			Reason:    "failed to delete instances",
-		})
-		return fmt.Errorf("failed to delete instaces: %w", err)
+	if !isTerminated {
+		if err = r.removeFromLoadBalancers(existingInstances); err != nil {
+			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+				Name:      r.machine.Name,
+				Namespace: r.machine.Namespace,
+				Reason:    "failed to remove instance from load balancers",
+			})
+			return fmt.Errorf("failed to remove instance from load balancers: %w", err)
+		}
+
+		terminatingInstances, err = terminateInstances(r.awsClient, existingInstances)
+		if err != nil {
+			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+				Name:      r.machine.Name,
+				Namespace: r.machine.Namespace,
+				Reason:    "failed to delete instances",
+			})
+			return fmt.Errorf("failed to delete instaces: %w", err)
+		}
+
 	}
 
 	if r.machine.Annotations == nil {
@@ -168,6 +174,8 @@ func (r *Reconciler) delete() error {
 		if terminatingInstances[0] != nil && terminatingInstances[0].CurrentState != nil && terminatingInstances[0].CurrentState.Name != nil {
 			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(terminatingInstances[0].CurrentState.Name)
 		}
+	} else if isTerminated {
+		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = ec2.InstanceStateNameTerminated
 	}
 
 	klog.Infof("Deleted machine %v", r.machine.Name)
@@ -183,7 +191,7 @@ func (r *Reconciler) update() error {
 		return fmt.Errorf("%v: failed validating machine provider spec: %v", r.machine.GetName(), err)
 	}
 
-	// Get all instances not terminated.
+	// Get all instances
 	existingInstances, err := r.getMachineInstances()
 	if err != nil {
 		metrics.RegisterFailedInstanceUpdate(&metrics.MachineLabels{
@@ -287,7 +295,7 @@ func (r *Reconciler) exists() (bool, error) {
 		return false, err
 	}
 
-	if len(existingInstances) == 0 {
+	if len(existingInstances) == 0 || r.checkIfInstanceTerminated(existingInstances[0]) {
 		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return false, &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
@@ -470,6 +478,18 @@ func (r *Reconciler) requeueIfInstancePending(instance *ec2.Instance) error {
 	}
 
 	return nil
+}
+
+// Check if an instance is terminated so that we can handle it appropriately
+func (r *Reconciler) checkIfInstanceTerminated(instance *ec2.Instance) bool {
+
+	if instance != nil && instance.State != nil &&
+		aws.StringValue(instance.State.Name) == ec2.InstanceStateNameTerminated {
+		klog.Infof("%s: Instance state terminated", r.machine.Name)
+		return true
+	}
+
+	return false
 }
 
 func (r *Reconciler) getMachineInstances() ([]*ec2.Instance, error) {

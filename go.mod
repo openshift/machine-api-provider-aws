@@ -1,8 +1,8 @@
 module github.com/openshift/machine-api-provider-aws
 
-go 1.22
+go 1.22.0
 
-toolchain go1.22.1
+toolchain go1.22.4
 
 require (
 	github.com/aws/aws-sdk-go v1.50.0
@@ -11,7 +11,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.17.1
 	github.com/onsi/gomega v1.32.0
-	github.com/openshift/api v0.0.0-20240610131338-a837bee24500
+	github.com/openshift/api v0.0.0-20240613141850-76a71dac36a0
 	github.com/openshift/machine-api-operator v0.2.1-0.20240606171151-148e5dc759a6
 	k8s.io/api v0.30.1
 	k8s.io/apimachinery v0.30.1

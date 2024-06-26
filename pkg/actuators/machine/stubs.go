@@ -360,6 +360,13 @@ func stubInstancePlacementGroupName(placementGroupName string) *machinev1beta1.A
 	return pc
 }
 
+func stubInstancePlacementGroupPartition(placementGroupName string, partitionNumber int32) *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.PlacementGroupName = placementGroupName
+	pc.PlacementGroupPartition = partitionNumber
+	return pc
+}
+
 func stubEFANetworkInterfaceType() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.NetworkInterfaceType = machinev1beta1.AWSEFANetworkInterfaceType

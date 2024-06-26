@@ -1030,6 +1030,42 @@ func TestLaunchInstance(t *testing.T) {
 			},
 		},
 		{
+			name:           "With custom placement group name and partition number",
+			providerConfig: stubInstancePlacementGroupPartition("placement-group1", 4),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups:                   stubSecurityGroupsDefault,
+					},
+				},
+				UserData: aws.String(""),
+				Placement: &ec2.Placement{
+					GroupName:       aws.String("placement-group1"),
+					PartitionNumber: aws.Int64(4),
+				},
+			},
+		},
+		{
 			name: "Wavelength Zone with Public IP",
 			providerConfig: stubProviderConfigCustomized(&stubInput{
 				InstanceType: "m5d.2xlarge",

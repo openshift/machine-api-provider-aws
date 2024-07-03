@@ -17,11 +17,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
+	openshiftfeatures "github.com/openshift/api/features"
 	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/library-go/pkg/features"
 	"github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	machineactuator "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
@@ -29,7 +32,9 @@ import (
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	"github.com/openshift/machine-api-provider-aws/pkg/version"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiserver/pkg/util/feature"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	k8sflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -91,6 +96,18 @@ func main() {
 		":9440",
 		"The address for health checking.",
 	)
+
+	// Sets up feature gates
+	defaultMutableGate := feature.DefaultMutableFeatureGate
+	// TODO: Do we want selfmanaged, or all in here?
+	_, err := features.NewFeatureGateOptions(defaultMutableGate, openshiftfeatures.SelfManaged, openshiftfeatures.FeatureGateMachineAPIMigration)
+	if err != nil {
+		klog.Fatalf("Error setting up feature gates: %v", err)
+	}
+
+	featureGateArgs := map[string]bool{}
+	flag.Var(k8sflag.NewMapStringBool(&featureGateArgs), "feature-gates", "A set of key=value pairs that describe feature gates for alpha/experimental features. "+
+		"Options are:\n"+strings.Join(defaultMutableGate.KnownFeatures(), "\n"))
 
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
@@ -171,7 +188,13 @@ func main() {
 		RegionCache:         describeRegionsCache,
 	})
 
-	if err := machine.AddWithActuator(mgr, machineActuator); err != nil {
+	// Sets feature gates
+	err = defaultMutableGate.SetFromMap(featureGateArgs)
+	if err != nil {
+		klog.Fatalf("Error setting feature gates from flags: %v", err)
+	}
+
+	if err := machine.AddWithActuatorAndFeatureGates(mgr, machineActuator, defaultMutableGate); err != nil {
 		klog.Fatalf("Error adding actuator: %v", err)
 	}
 

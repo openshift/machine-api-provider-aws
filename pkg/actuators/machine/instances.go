@@ -593,8 +593,8 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 	if machineProviderConfig.PlacementGroupName != "" {
 		placement.GroupName = &machineProviderConfig.PlacementGroupName
 
-		if machineProviderConfig.PlacementGroupPartition != 0 {
-			placement.PartitionNumber = aws.Int64(int64(machineProviderConfig.PlacementGroupPartition))
+		if machineProviderConfig.PlacementGroupPartition != nil {
+			placement.PartitionNumber = aws.Int64(int64(*machineProviderConfig.PlacementGroupPartition))
 		}
 	}
 

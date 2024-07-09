@@ -363,7 +363,7 @@ func stubInstancePlacementGroupName(placementGroupName string) *machinev1beta1.A
 func stubInstancePlacementGroupPartition(placementGroupName string, partitionNumber int32) *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.PlacementGroupName = placementGroupName
-	pc.PlacementGroupPartition = partitionNumber
+	pc.PlacementGroupPartition = &partitionNumber
 	return pc
 }
 

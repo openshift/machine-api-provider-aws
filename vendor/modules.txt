@@ -62,6 +62,9 @@ github.com/beorn7/perks/quantile
 # github.com/blang/semver v3.5.1+incompatible
 ## explicit
 github.com/blang/semver
+# github.com/blang/semver/v4 v4.0.0
+## explicit; go 1.14
+github.com/blang/semver/v4
 # github.com/cespare/xxhash/v2 v2.2.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
@@ -264,11 +267,12 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/openshift/api v0.0.0-20240708071937-c9a91940bf0f
+# github.com/openshift/api v0.0.0-20240731195412-e863d9f8a215
 ## explicit; go 1.22.0
 github.com/openshift/api/config/v1
 github.com/openshift/api/config/v1/zz_generated.crd-manifests
 github.com/openshift/api/config/v1alpha1
+github.com/openshift/api/features
 github.com/openshift/api/machine/v1
 github.com/openshift/api/machine/v1/zz_generated.crd-manifests
 github.com/openshift/api/machine/v1beta1
@@ -289,16 +293,18 @@ github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1
 github.com/openshift/client-go/machine/informers/externalversions/internalinterfaces
 github.com/openshift/client-go/machine/informers/externalversions/machine/v1beta1
 github.com/openshift/client-go/machine/listers/machine/v1beta1
-# github.com/openshift/library-go v0.0.0-20240116081341-964bcb3f545c
-## explicit; go 1.21
+# github.com/openshift/library-go v0.0.0-20240822162747-42bcbbc4ccc6
+## explicit; go 1.22.0
 github.com/openshift/library-go/pkg/config/clusterstatus
 github.com/openshift/library-go/pkg/config/leaderelection
-# github.com/openshift/machine-api-operator v0.2.1-0.20240708094115-80301b13a9d2
+github.com/openshift/library-go/pkg/features
+# github.com/openshift/machine-api-operator v0.2.1-0.20240813104042-5af274324af8
 ## explicit; go 1.22.0
 github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics
 github.com/openshift/machine-api-operator/pkg/util
 github.com/openshift/machine-api-operator/pkg/util/conditions
+github.com/openshift/machine-api-operator/pkg/util/testing
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 ## explicit
 github.com/peterbourgon/diskv
@@ -637,6 +643,9 @@ k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/netutil
 k8s.io/apimachinery/third_party/forked/golang/reflect
+# k8s.io/apiserver v0.30.1
+## explicit; go 1.22.0
+k8s.io/apiserver/pkg/util/feature
 # k8s.io/cli-runtime v0.30.0
 ## explicit; go 1.22.0
 k8s.io/cli-runtime/pkg/genericclioptions
@@ -808,6 +817,11 @@ k8s.io/client-go/util/workqueue
 # k8s.io/component-base v0.30.2
 ## explicit; go 1.22.0
 k8s.io/component-base/cli/flag
+k8s.io/component-base/featuregate
+k8s.io/component-base/metrics
+k8s.io/component-base/metrics/legacyregistry
+k8s.io/component-base/metrics/prometheus/feature
+k8s.io/component-base/metrics/prometheusextension
 k8s.io/component-base/version
 # k8s.io/klog/v2 v2.120.1
 ## explicit; go 1.18

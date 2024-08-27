@@ -12,6 +12,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	testutils "github.com/openshift/machine-api-operator/pkg/util/testing"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,8 +92,10 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 			AwsClientBuilder: awsClientBuilder,
 		}
 		actuator := NewActuator(params)
+		gate, err := testutils.NewDefaultMutableFeatureGate()
+		g.Expect(err).ToNot(HaveOccurred())
 
-		g.Expect(machinecontroller.AddWithActuator(mgr, actuator)).To(Succeed())
+		g.Expect(machinecontroller.AddWithActuator(mgr, actuator, gate)).To(Succeed())
 	}
 
 	var machine *machinev1beta1.Machine

@@ -13,6 +13,7 @@ import (
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1541,6 +1542,73 @@ func TestGetAvalabilityZoneTypeFromZoneName(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("getAvalabilityZoneTypeFromZoneName() = %v, want %v", got, tc.want)
 			}
+		})
+	}
+}
+
+func TestGetCapacityReservationSpecification(t *testing.T) {
+	mockCapacityReservationID := "cr-1234a6789d234f6f4"
+	capacityReservationIDShorterLength := "cr-1234"
+	capacityReservationIDLongerLength := "cr-1234567a912345b789"
+	capacityReservationIDContainsCapitalChars := "cr-B234a67891234567A"
+	capacityReservationIDContainsSpecialChars := "cr-$12456789123@567A"
+	testCases := []struct {
+		name                  string
+		capacityReservationID string
+		expectedRequest       *ec2.CapacityReservationSpecification
+		expectedError         error
+	}{
+		{
+			name:                  "with no CapacityReservationID options specified",
+			capacityReservationID: "",
+			expectedRequest:       nil,
+			expectedError:         nil,
+		},
+		{
+			name:                  "with invalid CapacityReservationID options specified, shorter length",
+			capacityReservationID: capacityReservationIDShorterLength,
+			expectedRequest:       nil,
+			expectedError:         mapierrors.InvalidMachineConfiguration("Invalid value for capacityReservationId: %q, it must start with 'cr-' and be exactly 20 characters long with 17 hexadecimal characters.", capacityReservationIDShorterLength),
+		},
+		{
+			name:                  "with invalid CapacityReservationID options specified, longer length greatherthan 17",
+			capacityReservationID: capacityReservationIDLongerLength,
+			expectedRequest:       nil,
+			expectedError:         mapierrors.InvalidMachineConfiguration("Invalid value for capacityReservationId: %q, it must start with 'cr-' and be exactly 20 characters long with 17 hexadecimal characters.", capacityReservationIDLongerLength),
+		},
+		{
+			name:                  "with invalid CapacityReservationID options specified, contains capital",
+			capacityReservationID: capacityReservationIDContainsCapitalChars,
+			expectedRequest:       nil,
+			expectedError:         mapierrors.InvalidMachineConfiguration("Invalid value for capacityReservationId: %q, it must start with 'cr-' and be exactly 20 characters long with 17 hexadecimal characters.", capacityReservationIDContainsCapitalChars),
+		},
+		{
+			name:                  "with invalid CapacityReservationID options specified, contains special chars",
+			capacityReservationID: capacityReservationIDContainsSpecialChars,
+			expectedRequest:       nil,
+			expectedError:         mapierrors.InvalidMachineConfiguration("Invalid value for capacityReservationId: %q, it must start with 'cr-' and be exactly 20 characters long with 17 hexadecimal characters.", capacityReservationIDContainsSpecialChars),
+		},
+		{
+			name:                  "with a valid CapacityReservationID specified",
+			capacityReservationID: mockCapacityReservationID,
+			expectedRequest: &ec2.CapacityReservationSpecification{
+				CapacityReservationTarget: &ec2.CapacityReservationTarget{
+					CapacityReservationId: aws.String(mockCapacityReservationID),
+				},
+			},
+			expectedError: nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gmg.NewWithT(t)
+			req, err := getCapacityReservationSpecification(tc.capacityReservationID)
+			if err == nil {
+				g.Expect(req).To(gmg.BeEquivalentTo(tc.expectedRequest))
+			} else {
+				g.Expect(err).To(gmg.BeEquivalentTo(tc.expectedError))
+			}
+
 		})
 	}
 }

@@ -11,7 +11,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.17.1
 	github.com/onsi/gomega v1.32.0
-	github.com/openshift/api v0.0.0-20240731195412-e863d9f8a215
+	github.com/openshift/api v0.0.0-20240827221819-3c0a506134ad
 	github.com/openshift/library-go v0.0.0-20240822162747-42bcbbc4ccc6
 	github.com/openshift/machine-api-operator v0.2.1-0.20240813104042-5af274324af8
 	k8s.io/api v0.30.2

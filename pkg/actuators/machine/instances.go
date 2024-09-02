@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -434,21 +435,27 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 	if err != nil {
 		return nil, err
 	}
+	capacityReservationSpecification, err := getCapacityReservationSpecification(machineProviderConfig.CapacityReservationID)
+
+	if err != nil {
+		return nil, err
+	}
 
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      amiID,
 		InstanceType: aws.String(machineProviderConfig.InstanceType),
 		// Only a single instance of the AWS instance allowed
-		MinCount:              aws.Int64(1),
-		MaxCount:              aws.Int64(1),
-		KeyName:               machineProviderConfig.KeyName,
-		IamInstanceProfile:    iamInstanceProfile,
-		TagSpecifications:     []*ec2.TagSpecification{tagInstance, tagVolume},
-		NetworkInterfaces:     networkInterfaces,
-		UserData:              &userDataEnc,
-		Placement:             placement,
-		MetadataOptions:       getInstanceMetadataOptionsRequest(machineProviderConfig),
-		InstanceMarketOptions: getInstanceMarketOptionsRequest(machineProviderConfig),
+		MinCount:                         aws.Int64(1),
+		MaxCount:                         aws.Int64(1),
+		KeyName:                          machineProviderConfig.KeyName,
+		IamInstanceProfile:               iamInstanceProfile,
+		TagSpecifications:                []*ec2.TagSpecification{tagInstance, tagVolume},
+		NetworkInterfaces:                networkInterfaces,
+		UserData:                         &userDataEnc,
+		Placement:                        placement,
+		MetadataOptions:                  getInstanceMetadataOptionsRequest(machineProviderConfig),
+		InstanceMarketOptions:            getInstanceMarketOptionsRequest(machineProviderConfig),
+		CapacityReservationSpecification: capacityReservationSpecification,
 	}
 
 	if len(blockDeviceMappings) > 0 {
@@ -638,4 +645,25 @@ func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachine
 		return nil
 	}
 	return imdsOptions
+}
+
+func getCapacityReservationSpecification(capacityReservationID string) (*ec2.CapacityReservationSpecification, error) {
+	if capacityReservationID == "" {
+		//  Not targeting any specific Capacity Reservation
+		return nil, nil
+	}
+
+	// Starts with cr-xxxxxxxxxxxxxxxxx with length of 17 characters excluding cr-
+	re := regexp.MustCompile(`^cr-[0-9a-f]{17}$`)
+
+	if !re.MatchString(capacityReservationID) {
+		// It must starts with cr-xxxxxxxxxxxxxxxxx with length of 17 characters excluding cr-
+		return nil, mapierrors.InvalidMachineConfiguration("Invalid value for capacityReservationId: %q, it must start with 'cr-' and be exactly 20 characters long with 17 hexadecimal characters.", capacityReservationID)
+	}
+
+	return &ec2.CapacityReservationSpecification{
+		CapacityReservationTarget: &ec2.CapacityReservationTarget{
+			CapacityReservationId: aws.String(capacityReservationID),
+		},
+	}, nil
 }

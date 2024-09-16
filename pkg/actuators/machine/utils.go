@@ -39,7 +39,8 @@ import (
 const upstreamMachineClusterIDLabel = "sigs.k8s.io/cluster-api-cluster"
 
 // existingInstanceStates returns the list of states an EC2 instance can be in
-// while being considered "existing", i.e. mostly anything but "Terminated".
+// while being considered "existing"
+// terminated is also handled so that an instance can't get stuck in terminated
 func existingInstanceStates() []*string {
 	return []*string{
 		aws.String(ec2.InstanceStateNameRunning),
@@ -47,6 +48,7 @@ func existingInstanceStates() []*string {
 		aws.String(ec2.InstanceStateNameStopped),
 		aws.String(ec2.InstanceStateNameStopping),
 		aws.String(ec2.InstanceStateNameShuttingDown),
+		aws.String(ec2.InstanceStateNameTerminated),
 	}
 }
 
@@ -68,7 +70,7 @@ func getStoppedInstances(machine *machinev1beta1.Machine, client awsclient.Clien
 	return getInstances(machine, client, stoppedInstanceStateFilter)
 }
 
-// getExistingInstances returns all instances not terminated
+// getExistingInstances returns all instances
 func getExistingInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
 	return getInstances(machine, client, existingInstanceStates())
 }

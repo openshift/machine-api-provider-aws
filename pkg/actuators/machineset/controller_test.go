@@ -31,8 +31,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -46,7 +46,7 @@ var _ = Describe("MachineSetReconciler", func() {
 	var namespace *corev1.Namespace
 	fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
 	Expect(err).ToNot(HaveOccurred())
-	awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+	awsClientBuilder := func(client client.Client, secretName, namespace, region string, configManagedClient client.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 		return fakeClient, nil
 	}
 
@@ -63,7 +63,9 @@ var _ = Describe("MachineSetReconciler", func() {
 			AwsClientBuilder:   awsClientBuilder,
 			InstanceTypesCache: NewInstanceTypesCache(),
 		}
-		Expect(r.SetupWithManager(mgr, controller.Options{})).To(Succeed())
+		Expect(r.SetupWithManager(mgr, controller.Options{
+			SkipNameValidation: ptr.To(true),
+		})).To(Succeed())
 
 		fakeRecorder = record.NewFakeRecorder(1)
 		r.recorder = fakeRecorder
@@ -357,7 +359,7 @@ func TestReconcile(t *testing.T) {
 
 			fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
 			Expect(err).ToNot(HaveOccurred())
-			awsClientBuilder := func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+			awsClientBuilder := func(client client.Client, secretName, namespace, region string, configManagedClient client.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 				return fakeClient, nil
 			}
 

@@ -42,8 +42,16 @@ func (r *Reconciler) create() error {
 
 	if instances, err := r.getMachineInstances(); err == nil && len(instances) > 0 {
 		klog.Infof("%s: found existing instance %s for machine", r.machine.Name, aws.StringValue(instances[0].InstanceId))
+
+		if r.checkIfInstanceTerminated(instances[0]) {
+			// The instance exists, but is in a terminated state.
+			// This means the instance was terminated prior to MAPI realizing it existed.
+			// We should fail the machine in this scenario else we end up in a forever loop.
+			return machinecontroller.InvalidMachineConfiguration("Instance %s is in a terminated state", aws.StringValue(instances[0].InstanceId))
+		}
+
 		// If we got here, then Exists failed to find the instance, and we were asked to create a new instance.
-		// The instance already exists, so requeue and start the reconcile again, Exists should pass now.
+		// The instance already exists, and isn't terminated, so requeue and start the reconcile again, Exists should pass now.
 		// Don't bother updating the status, Update will configure everything on the next reconcile.
 		return fmt.Errorf("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 	}
@@ -145,7 +153,7 @@ func (r *Reconciler) delete() error {
 	var terminatingInstances []*ec2.InstanceStateChange
 
 	if !isTerminated {
-		if err = r.removeFromLoadBalancers(existingInstances); err != nil {
+		if err := r.removeFromLoadBalancers(existingInstances); err != nil {
 			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
 				Name:      r.machine.Name,
 				Namespace: r.machine.Namespace,
@@ -295,13 +303,20 @@ func (r *Reconciler) exists() (bool, error) {
 		return false, err
 	}
 
-	if len(existingInstances) == 0 || r.checkIfInstanceTerminated(existingInstances[0]) {
+	if len(existingInstances) == 0 {
 		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return false, &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}
 
 		klog.Infof("%s: Instance does not exist", r.machine.Name)
+		return false, nil
+	}
+
+	if r.checkIfInstanceTerminated(existingInstances[0]) {
+		// The instance exists, but is in a terminated state.
+		// For the purposes of exists, this machine should not be considered to exist.
+		// If the machine is already provisioned, it will go failed.
 		return false, nil
 	}
 

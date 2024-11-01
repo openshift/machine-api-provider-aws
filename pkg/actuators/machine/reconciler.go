@@ -42,8 +42,16 @@ func (r *Reconciler) create() error {
 
 	if instances, err := r.getMachineInstances(); err == nil && len(instances) > 0 {
 		klog.Infof("%s: found existing instance %s for machine", r.machine.Name, aws.StringValue(instances[0].InstanceId))
+
+		if r.checkIfInstanceTerminated(instances[0]) {
+			// The instance exists, but is in a terminated state.
+			// This means the instance was terminated prior to MAPI realizing it existed.
+			// We should fail the machine in this scenario else we end up in a forever loop.
+			return machinecontroller.InvalidMachineConfiguration("Instance %s is in a terminated state", aws.StringValue(instances[0].InstanceId))
+		}
+
 		// If we got here, then Exists failed to find the instance, and we were asked to create a new instance.
-		// The instance already exists, so requeue and start the reconcile again, Exists should pass now.
+		// The instance already exists, and isn't terminated, so requeue and start the reconcile again, Exists should pass now.
 		// Don't bother updating the status, Update will configure everything on the next reconcile.
 		return fmt.Errorf("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 	}
@@ -122,7 +130,7 @@ func (r *Reconciler) create() error {
 func (r *Reconciler) delete() error {
 	klog.Infof("%s: deleting machine", r.machine.Name)
 
-	// Get all instances not terminated.
+	// Get all instances (including terminated, so that we can handle a terminated state)
 	existingInstances, err := r.getMachineInstances()
 	if err != nil {
 		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
@@ -141,23 +149,29 @@ func (r *Reconciler) delete() error {
 		return nil
 	}
 
-	if err = r.removeFromLoadBalancers(existingInstances); err != nil {
-		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
-			Name:      r.machine.Name,
-			Namespace: r.machine.Namespace,
-			Reason:    "failed to remove instance from load balancers",
-		})
-		return fmt.Errorf("failed to remove instance from load balancers: %w", err)
-	}
+	isTerminated := r.checkIfInstanceTerminated(existingInstances[0])
+	var terminatingInstances []*ec2.InstanceStateChange
 
-	terminatingInstances, err := terminateInstances(r.awsClient, existingInstances)
-	if err != nil {
-		metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
-			Name:      r.machine.Name,
-			Namespace: r.machine.Namespace,
-			Reason:    "failed to delete instances",
-		})
-		return fmt.Errorf("failed to delete instaces: %w", err)
+	if !isTerminated {
+		if err := r.removeFromLoadBalancers(existingInstances); err != nil {
+			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+				Name:      r.machine.Name,
+				Namespace: r.machine.Namespace,
+				Reason:    "failed to remove instance from load balancers",
+			})
+			return fmt.Errorf("failed to remove instance from load balancers: %w", err)
+		}
+
+		terminatingInstances, err = terminateInstances(r.awsClient, existingInstances)
+		if err != nil {
+			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
+				Name:      r.machine.Name,
+				Namespace: r.machine.Namespace,
+				Reason:    "failed to delete instances",
+			})
+			return fmt.Errorf("failed to delete instaces: %w", err)
+		}
+
 	}
 
 	if r.machine.Annotations == nil {
@@ -168,6 +182,8 @@ func (r *Reconciler) delete() error {
 		if terminatingInstances[0] != nil && terminatingInstances[0].CurrentState != nil && terminatingInstances[0].CurrentState.Name != nil {
 			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(terminatingInstances[0].CurrentState.Name)
 		}
+	} else if isTerminated {
+		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = ec2.InstanceStateNameTerminated
 	}
 
 	klog.Infof("Deleted machine %v", r.machine.Name)
@@ -183,7 +199,7 @@ func (r *Reconciler) update() error {
 		return fmt.Errorf("%v: failed validating machine provider spec: %v", r.machine.GetName(), err)
 	}
 
-	// Get all instances not terminated.
+	// Get all instances
 	existingInstances, err := r.getMachineInstances()
 	if err != nil {
 		metrics.RegisterFailedInstanceUpdate(&metrics.MachineLabels{
@@ -294,6 +310,13 @@ func (r *Reconciler) exists() (bool, error) {
 		}
 
 		klog.Infof("%s: Instance does not exist", r.machine.Name)
+		return false, nil
+	}
+
+	if r.checkIfInstanceTerminated(existingInstances[0]) {
+		// The instance exists, but is in a terminated state.
+		// For the purposes of exists, this machine should not be considered to exist.
+		// If the machine is already provisioned, it will go failed.
 		return false, nil
 	}
 
@@ -470,6 +493,18 @@ func (r *Reconciler) requeueIfInstancePending(instance *ec2.Instance) error {
 	}
 
 	return nil
+}
+
+// Check if an instance is terminated so that we can handle it appropriately
+func (r *Reconciler) checkIfInstanceTerminated(instance *ec2.Instance) bool {
+
+	if instance != nil && instance.State != nil &&
+		aws.StringValue(instance.State.Name) == ec2.InstanceStateNameTerminated {
+		klog.Infof("%s: Instance state terminated", r.machine.Name)
+		return true
+	}
+
+	return false
 }
 
 func (r *Reconciler) getMachineInstances() ([]*ec2.Instance, error) {

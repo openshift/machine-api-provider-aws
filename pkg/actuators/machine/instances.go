@@ -22,6 +22,10 @@ import (
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	zoneTypeWavelengthZone = "wavelength-zone"
+)
+
 // Scan machine tags, and return a deduped tags list. The first found value gets precedence.
 func removeDuplicatedTags(tags []*ec2.Tag) []*ec2.Tag {
 	m := make(map[string]bool)
@@ -368,10 +372,12 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 			Groups:      securityGroupsIDs,
 		},
 	}
-	// Public IP assignment is different in Wavelength Zones.
-	// AvailabilityZone and LocalZone uses InternetGateway.
-	// WavelengthZone uses Carrier Gateway.
-	if aws.BoolValue(machineProviderConfig.PublicIP) {
+
+	// Public IP address assignment to instances created in Wavelength
+	// Zones' subnet requires the attribute AssociateCarrierIpAddress
+	// instead of AssociatePublicIpAddress.
+	// AssociatePublicIpAddress and AssociateCarrierIpAddress are mutually exclusive.
+	if machineProviderConfig.PublicIP != nil {
 		zoneName, err := getAvalabilityZoneFromSubnetID(*subnetID, awsClient)
 		if err != nil {
 			return nil, mapierrors.InvalidMachineConfiguration("error discoverying zone type: %v", err)
@@ -381,7 +387,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 			return nil, mapierrors.InvalidMachineConfiguration("error discoverying zone type: %v", err)
 		}
 
-		if zoneType == "wavelength-zone" {
+		if zoneType == zoneTypeWavelengthZone {
 			networkInterfaces[0].AssociateCarrierIpAddress = machineProviderConfig.PublicIP
 		} else {
 			networkInterfaces[0].AssociatePublicIpAddress = machineProviderConfig.PublicIP

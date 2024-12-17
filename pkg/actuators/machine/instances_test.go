@@ -1094,8 +1094,8 @@ func TestLaunchInstance(t *testing.T) {
 				}},
 				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
 						AssociateCarrierIpAddress: aws.Bool(true),
+						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
 						SubnetId:                  aws.String(stubSubnetID),
 						Groups:                    stubSecurityGroupsDefault,
 					},
@@ -1132,9 +1132,10 @@ func TestLaunchInstance(t *testing.T) {
 				}},
 				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex: aws.Int64(providerConfig.DeviceIndex),
-						SubnetId:    aws.String(stubSubnetID),
-						Groups:      stubSecurityGroupsDefault,
+						AssociateCarrierIpAddress: aws.Bool(false),
+						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
+						SubnetId:                  aws.String(stubSubnetID),
+						Groups:                    stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
@@ -1168,9 +1169,10 @@ func TestLaunchInstance(t *testing.T) {
 				}},
 				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex: aws.Int64(providerConfig.DeviceIndex),
-						SubnetId:    aws.String(stubSubnetID),
-						Groups:      stubSecurityGroupsDefault,
+						AssociatePublicIpAddress: aws.Bool(false),
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						SubnetId:                 aws.String(stubSubnetID),
+						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),

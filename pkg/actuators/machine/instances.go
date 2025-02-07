@@ -447,6 +447,12 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		return nil, err
 	}
 
+	instanceMarketOptions, err := getInstanceMarketOptionsRequest(machineProviderConfig)
+
+	if err != nil {
+		return nil, err
+	}
+
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      amiID,
 		InstanceType: aws.String(machineProviderConfig.InstanceType),
@@ -460,7 +466,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		UserData:                         &userDataEnc,
 		Placement:                        placement,
 		MetadataOptions:                  getInstanceMetadataOptionsRequest(machineProviderConfig),
-		InstanceMarketOptions:            getInstanceMarketOptionsRequest(machineProviderConfig),
+		InstanceMarketOptions:            instanceMarketOptions,
 		CapacityReservationSpecification: capacityReservationSpecification,
 	}
 
@@ -566,34 +572,56 @@ func sortInstances(instances []*ec2.Instance) {
 	sort.Sort(instanceList(instances))
 }
 
-func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.InstanceMarketOptionsRequest {
-	if providerConfig.SpotMarketOptions == nil {
-		// Instance is not a Spot instance
-		return nil
+func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) (*ec2.InstanceMarketOptionsRequest, error) {
+	if providerConfig.MarketType != "" && providerConfig.MarketType == machinev1beta1.MarketTypeCapacityBlock && providerConfig.SpotMarketOptions != nil {
+		return nil, errors.New("can't create spot capacity-blocks, remove spot market request")
 	}
 
-	// Set required values for Spot instances
-	spotOptions := &ec2.SpotMarketOptions{}
-	// The following two options ensure that:
-	// - If an instance is interrupted, it is terminated rather than hibernating or stopping
-	// - No replacement instance will be created if the instance is interrupted
-	// - If the spot request cannot immediately be fulfilled, it will not be created
-	// This behaviour should satisfy the 1:1 mapping of Machines to Instances as
-	// assumed by the machine API.
-	spotOptions.SetInstanceInterruptionBehavior(ec2.InstanceInterruptionBehaviorTerminate)
-	spotOptions.SetSpotInstanceType(ec2.SpotInstanceTypeOneTime)
-
-	// Set the MaxPrice if specified by the providerConfig
-	maxPrice := providerConfig.SpotMarketOptions.MaxPrice
-	if maxPrice != nil && *maxPrice != "" {
-		spotOptions.SetMaxPrice(*maxPrice)
+	// Infer MarketType if not explicitly set
+	if providerConfig.SpotMarketOptions != nil && providerConfig.MarketType == "" {
+		providerConfig.MarketType = machinev1beta1.MarketTypeSpot
 	}
 
-	instanceMarketOptionsRequest := &ec2.InstanceMarketOptionsRequest{}
-	instanceMarketOptionsRequest.SetMarketType(ec2.MarketTypeSpot)
-	instanceMarketOptionsRequest.SetSpotOptions(spotOptions)
+	if providerConfig.MarketType == "" {
+		providerConfig.MarketType = machinev1beta1.MarketTypeOnDemand
+	}
 
-	return instanceMarketOptionsRequest
+	switch providerConfig.MarketType {
+	case machinev1beta1.MarketTypeCapacityBlock:
+		if providerConfig.CapacityReservationID == "" {
+			return nil, errors.New("capacityReservationID is required when CapacityBlock is enabled")
+		}
+		return &ec2.InstanceMarketOptionsRequest{
+			MarketType: aws.String(ec2.MarketTypeCapacityBlock),
+		}, nil
+	case machinev1beta1.MarketTypeSpot:
+		// Set required values for Spot instances
+		spotOpts := &ec2.SpotMarketOptions{
+			// The following two options ensure that:
+			// - If an instance is interrupted, it is terminated rather than hibernating or stopping
+			// - No replacement instance will be created if the instance is interrupted
+			// - If the spot request cannot immediately be fulfilled, it will not be created
+			// This behaviour should satisfy the 1:1 mapping of Machines to Instances as
+			// assumed by the Cluster API.
+			InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
+			SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+		}
+
+		if maxPrice := aws.StringValue(providerConfig.SpotMarketOptions.MaxPrice); maxPrice != "" {
+			spotOpts.MaxPrice = aws.String(maxPrice)
+		}
+
+		return &ec2.InstanceMarketOptionsRequest{
+			MarketType:  aws.String(ec2.MarketTypeSpot),
+			SpotOptions: spotOpts,
+		}, nil
+	case machinev1beta1.MarketTypeOnDemand:
+		// Instance is on-demand or empty
+		return nil, nil
+	default:
+		// Invalid MarketType provided
+		return nil, fmt.Errorf("invalid MarketType %q", providerConfig.MarketType)
+	}
 }
 
 // constructInstancePlacement configures the placement options for the RunInstances request

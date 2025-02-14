@@ -1227,19 +1227,24 @@ func TestSortInstances(t *testing.T) {
 }
 
 func TestGetInstanceMarketOptionsRequest(t *testing.T) {
+	mockCapacityReservationID := "cr-123"
 	testCases := []struct {
-		name              string
-		spotMarketOptions *machinev1beta1.SpotMarketOptions
-		expectedRequest   *ec2.InstanceMarketOptionsRequest
+		name            string
+		providerConfig  *machinev1beta1.AWSMachineProviderConfig
+		expectedRequest *ec2.InstanceMarketOptionsRequest
+		wantErr         bool
 	}{
 		{
-			name:              "with no Spot options specified",
-			spotMarketOptions: nil,
-			expectedRequest:   nil,
+			name:            "with no Spot options specified",
+			providerConfig:  &machinev1beta1.AWSMachineProviderConfig{},
+			expectedRequest: nil,
+			wantErr:         false,
 		},
 		{
-			name:              "with an empty Spot options specified",
-			spotMarketOptions: &machinev1beta1.SpotMarketOptions{},
+			name: "with an empty Spot options specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				SpotMarketOptions: &machinev1beta1.SpotMarketOptions{},
+			},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
 				MarketType: aws.String(ec2.MarketTypeSpot),
 				SpotOptions: &ec2.SpotMarketOptions{
@@ -1247,11 +1252,14 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
 				},
 			},
+			wantErr: false,
 		},
 		{
 			name: "with an empty MaxPrice specified",
-			spotMarketOptions: &machinev1beta1.SpotMarketOptions{
-				MaxPrice: aws.String(""),
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				SpotMarketOptions: &machinev1beta1.SpotMarketOptions{
+					MaxPrice: aws.String(""),
+				},
 			},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
 				MarketType: aws.String(ec2.MarketTypeSpot),
@@ -1260,11 +1268,14 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
 				},
 			},
+			wantErr: false,
 		},
 		{
 			name: "with a valid MaxPrice specified",
-			spotMarketOptions: &machinev1beta1.SpotMarketOptions{
-				MaxPrice: aws.String("0.01"),
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				SpotMarketOptions: &machinev1beta1.SpotMarketOptions{
+					MaxPrice: aws.String("0.01"),
+				},
 			},
 			expectedRequest: &ec2.InstanceMarketOptionsRequest{
 				MarketType: aws.String(ec2.MarketTypeSpot),
@@ -1274,18 +1285,56 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 					MaxPrice:                     aws.String("0.01"),
 				},
 			},
+			wantErr: false,
+		},
+		{
+			name:            "invalid MarketType specified",
+			expectedRequest: nil,
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType: machinev1beta1.MarketType("invalid"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "with a MarketType to MarketTypeCapacityBlock specified with capacityReservationID set to nil",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType:            machinev1beta1.MarketTypeCapacityBlock,
+				CapacityReservationID: "",
+			},
+			expectedRequest: nil,
+			wantErr:         true,
+		},
+		{
+			name: "with a MarketType to MarketTypeCapacityBlock with capacityReservationID set to nil",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType:            machinev1beta1.MarketTypeCapacityBlock,
+				CapacityReservationID: mockCapacityReservationID,
+			},
+			expectedRequest: &ec2.InstanceMarketOptionsRequest{
+				MarketType: aws.String(ec2.MarketTypeCapacityBlock),
+			},
+			wantErr: false,
+		},
+		{
+			name: "with a MarketType to MarketTypeCapacityBlock set with capacityReservationID set and empty Spot options specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType:            machinev1beta1.MarketTypeCapacityBlock,
+				CapacityReservationID: mockCapacityReservationID,
+				SpotMarketOptions:     &machinev1beta1.SpotMarketOptions{},
+			},
+			wantErr: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			providerConfig := &machinev1beta1.AWSMachineProviderConfig{
-				SpotMarketOptions: tc.spotMarketOptions,
-			}
+			g := gmg.NewWithT(t)
 
-			request := getInstanceMarketOptionsRequest(providerConfig)
-			if !reflect.DeepEqual(request, tc.expectedRequest) {
-				t.Errorf("Case: %s. Got: %v, expected: %v", tc.name, request, tc.expectedRequest)
+			request, err := getInstanceMarketOptionsRequest(tc.providerConfig)
+			if err == nil {
+				g.Expect(request).To(gmg.BeEquivalentTo(tc.expectedRequest))
+			} else {
+				g.Expect(err).To(gmg.HaveOccurred())
 			}
 		})
 	}

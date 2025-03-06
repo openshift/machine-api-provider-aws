@@ -577,6 +577,10 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachinePr
 		return nil, errors.New("can't create spot capacity-blocks, remove spot market request")
 	}
 
+	if (providerConfig.MarketType == machinev1beta1.MarketTypeSpot || providerConfig.SpotMarketOptions != nil) && providerConfig.CapacityReservationID != "" {
+		return nil, errors.New("can't create spot capacity-blocks, remove capacityReservationID or remove spot requests")
+	}
+
 	// Infer MarketType if not explicitly set
 	if providerConfig.SpotMarketOptions != nil && providerConfig.MarketType == "" {
 		providerConfig.MarketType = machinev1beta1.MarketTypeSpot
@@ -584,6 +588,10 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachinePr
 
 	if providerConfig.MarketType == "" {
 		providerConfig.MarketType = machinev1beta1.MarketTypeOnDemand
+	}
+
+	if providerConfig.MarketType == machinev1beta1.MarketTypeSpot && providerConfig.SpotMarketOptions == nil {
+		providerConfig.SpotMarketOptions = &machinev1beta1.SpotMarketOptions{}
 	}
 
 	switch providerConfig.MarketType {

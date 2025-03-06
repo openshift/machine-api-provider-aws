@@ -1255,6 +1255,38 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "with an marketType Spot options specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType: machinev1beta1.MarketTypeSpot,
+			},
+			expectedRequest: &ec2.InstanceMarketOptionsRequest{
+				MarketType: aws.String(ec2.MarketTypeSpot),
+				SpotOptions: &ec2.SpotMarketOptions{
+					InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
+					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "with an marketType Spot and CapacityRerservationID specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MarketType:            machinev1beta1.MarketTypeSpot,
+				CapacityReservationID: mockCapacityReservationID,
+			},
+			expectedRequest: nil,
+			wantErr:         true,
+		},
+		{
+			name: "with an marketType Spot and CapacityRerservationID specified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				SpotMarketOptions:     &machinev1beta1.SpotMarketOptions{},
+				CapacityReservationID: mockCapacityReservationID,
+			},
+			expectedRequest: nil,
+			wantErr:         true,
+		},
+		{
 			name: "with an empty MaxPrice specified",
 			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
 				SpotMarketOptions: &machinev1beta1.SpotMarketOptions{

@@ -24,13 +24,17 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gtypes "github.com/onsi/gomega/types"
+	openshiftfeatures "github.com/openshift/api/features"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/library-go/pkg/features"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	fakeawsclient "github.com/openshift/machine-api-provider-aws/pkg/client/fake"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/component-base/featuregate"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -57,11 +61,15 @@ var _ = Describe("MachineSetReconciler", func() {
 			}})
 		Expect(err).ToNot(HaveOccurred())
 
+		gate, err := newDefaultMutableFeatureGate()
+		Expect(err).NotTo(HaveOccurred())
+
 		r := Reconciler{
 			Client:             mgr.GetClient(),
 			Log:                log.Log,
 			AwsClientBuilder:   awsClientBuilder,
 			InstanceTypesCache: NewInstanceTypesCache(),
+			Gate:               gate,
 		}
 		Expect(r.SetupWithManager(mgr, controller.Options{
 			SkipNameValidation: ptr.To(true),
@@ -446,4 +454,21 @@ func providerSpecFromMachine(in *machinev1beta1.AWSMachineProviderConfig) (machi
 	return machinev1beta1.ProviderSpec{
 		Value: &runtime.RawExtension{Raw: bytes},
 	}, nil
+}
+
+func newDefaultMutableFeatureGate() (featuregate.MutableFeatureGate, error) {
+	defaultMutableGate := feature.DefaultMutableFeatureGate
+	if _, err := features.NewFeatureGateOptions(defaultMutableGate, openshiftfeatures.SelfManaged,
+		openshiftfeatures.FeatureGateMachineAPIMigration); err != nil {
+		return nil, fmt.Errorf("failed to set up default feature gate: %w", err)
+	}
+	if err := defaultMutableGate.SetFromMap(
+		map[string]bool{
+			"MachineAPIMigration": true,
+		},
+	); err != nil {
+		return nil, fmt.Errorf("failed to set features from map: %w", err)
+	}
+
+	return defaultMutableGate, nil
 }

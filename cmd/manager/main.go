@@ -212,6 +212,7 @@ func main() {
 		RegionCache:         describeRegionsCache,
 		ConfigManagedClient: configManagedClient,
 		InstanceTypesCache:  machinesetcontroller.NewInstanceTypesCache(),
+		Gate:                defaultMutableGate,
 	}).SetupWithManager(mgr, controller.Options{}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MachineSet")
 		os.Exit(1)

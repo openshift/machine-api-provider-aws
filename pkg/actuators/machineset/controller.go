@@ -6,15 +6,19 @@ import (
 	"strconv"
 
 	"github.com/go-logr/logr"
+	openshiftfeatures "github.com/openshift/api/features"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/machine-api-operator/pkg/controller/machine"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/util"
+	"github.com/openshift/machine-api-operator/pkg/util/conditions"
 	utils "github.com/openshift/machine-api-provider-aws/pkg/actuators/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,6 +43,7 @@ type Reconciler struct {
 	RegionCache         awsclient.RegionCache
 	ConfigManagedClient client.Client
 	InstanceTypesCache  InstanceTypesCache
+	Gate                featuregate.MutableFeatureGate
 
 	recorder record.EventRecorder
 	scheme   *runtime.Scheme
@@ -81,6 +86,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if !machineSet.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
+
+	if r.Gate.Enabled(featuregate.Feature(openshiftfeatures.FeatureGateMachineAPIMigration)) {
+		// The paused condition is set by the machine-api-operator's machineset controller
+		// here: https://github.com/openshift/machine-api-operator/blob/ea46700bc132f1ba40d91f523f4b3a16dfafe8b8/pkg/controller/machineset/controller.go#L176-L231,
+		// once it observes the machineset .status.authoritativeAPI is not MachineAPI.
+		// This is a minor controller meant for annotations, so starts skipping further action
+		// only when the main controller sets the paused condition.
+		// Context for this decision here: https://redhat-internal.slack.com/archives/GE2HQ9QP4/p1747830982876869
+		if conditions.IsTrue(machineSet, machine.PausedCondition) {
+			klog.V(3).Infof("%v: machine set has paused condition, taking no further action", machineSet.Name)
+			return ctrl.Result{}, nil
+		}
+	}
+
 	originalMachineSetToPatch := client.MergeFrom(machineSet.DeepCopy())
 
 	result, err := r.reconcile(machineSet)

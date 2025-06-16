@@ -98,6 +98,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			klog.V(3).Infof("%v: machine set has paused condition, taking no further action", machineSet.Name)
 			return ctrl.Result{}, nil
 		}
+
+		// Reconciliation can continue only if the authoritativeAPI is set to a value is set to MachineAPI.
+		// This extra check is needed as in early stages of reconcilation of a new MAPI MachineSet the Paused condition might not yet be set,
+		// as such the authority status needs to be checked directly to ensure correct behaviour.
+		if machineSet.Status.AuthoritativeAPI != machinev1beta1.MachineAuthorityMachineAPI {
+			klog.V(3).Infof("%v: machine set has .status.authoritativeAPI set to %q, taking no further action", machineSet.Name, machineSet.Status.AuthoritativeAPI)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	originalMachineSetToPatch := client.MergeFrom(machineSet.DeepCopy())

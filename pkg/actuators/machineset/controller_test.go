@@ -91,17 +91,24 @@ var _ = Describe("MachineSetReconciler", func() {
 	})
 
 	type reconcileTestCase = struct {
-		instanceType        string
-		existingAnnotations map[string]string
-		expectedAnnotations map[string]string
-		expectedEvents      []string
+		instanceType           string
+		existingAnnotations    map[string]string
+		expectedAnnotations    map[string]string
+		expectedEvents         []string
+		statusAuthoritativeAPI machinev1beta1.MachineAuthority
 	}
 
 	DescribeTable("when reconciling MachineSets", func(rtc reconcileTestCase) {
-		machineSet, err := newTestMachineSet(namespace.Name, rtc.instanceType, rtc.existingAnnotations)
+		machineSet, err := newTestMachineSet(namespace.Name, rtc.instanceType, rtc.existingAnnotations, rtc.statusAuthoritativeAPI)
 		Expect(err).ToNot(HaveOccurred())
+		msStatus := machineSet.Status
 
 		Expect(c.Create(ctx, machineSet)).To(Succeed())
+
+		originalMS := machineSet.DeepCopy()
+		machineSet.Status = msStatus
+
+		Expect(c.Status().Patch(ctx, machineSet, client.MergeFrom(originalMS))).To(Succeed())
 
 		Eventually(func() map[string]string {
 			m := &machinev1beta1.MachineSet{}
@@ -129,14 +136,16 @@ var _ = Describe("MachineSetReconciler", func() {
 		Expect(receivedEvents).To(ConsistOf(eventMatchers))
 	},
 		Entry("with no instanceType set", reconcileTestCase{
-			instanceType:        "",
-			existingAnnotations: make(map[string]string),
-			expectedAnnotations: make(map[string]string),
-			expectedEvents:      []string{"FailedUpdate"},
+			instanceType:           "",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
+			expectedAnnotations:    make(map[string]string),
+			expectedEvents:         []string{"FailedUpdate"},
 		}),
 		Entry("with a a1.2xlarge", reconcileTestCase{
-			instanceType:        "a1.2xlarge",
-			existingAnnotations: make(map[string]string),
+			instanceType:           "a1.2xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "8",
 				memoryKey: "16384",
@@ -146,8 +155,9 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with a p2.16xlarge", reconcileTestCase{
-			instanceType:        "p2.16xlarge",
-			existingAnnotations: make(map[string]string),
+			instanceType:           "p2.16xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "64",
 				memoryKey: "749568",
@@ -157,7 +167,8 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with existing annotations", reconcileTestCase{
-			instanceType: "a1.2xlarge",
+			instanceType:           "a1.2xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
 			existingAnnotations: map[string]string{
 				"existing": "annotation",
 				"annother": "existingAnnotation",
@@ -173,8 +184,9 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with a m6g.4xlarge (aarch64)", reconcileTestCase{
-			instanceType:        "m6g.4xlarge",
-			existingAnnotations: make(map[string]string),
+			instanceType:           "m6g.4xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "16",
 				memoryKey: "65536",
@@ -184,8 +196,9 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with an instance type missing the supported architecture (default to amd64)", reconcileTestCase{
-			instanceType:        "m6i.8xlarge",
-			existingAnnotations: make(map[string]string),
+			instanceType:           "m6i.8xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "32",
 				memoryKey: "131072",
@@ -195,8 +208,9 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with an unrecognized supported architecture (default to amd64)", reconcileTestCase{
-			instanceType:        "m6h.8xlarge",
-			existingAnnotations: make(map[string]string),
+			instanceType:           "m6h.8xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "32",
 				memoryKey: "131072",
@@ -206,7 +220,8 @@ var _ = Describe("MachineSetReconciler", func() {
 			expectedEvents: []string{},
 		}),
 		Entry("with an invalid instanceType", reconcileTestCase{
-			instanceType: "invalid",
+			instanceType:           "invalid",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
 			existingAnnotations: map[string]string{
 				"existing": "annotation",
 				"annother": "existingAnnotation",
@@ -251,24 +266,27 @@ func deleteMachineSets(c client.Client, namespaceName string) error {
 
 func TestReconcile(t *testing.T) {
 	testCases := []struct {
-		name                string
-		instanceType        string
-		existingAnnotations map[string]string
-		expectedAnnotations map[string]string
-		expectErr           bool
+		name                   string
+		instanceType           string
+		statusAuthoritativeAPI machinev1beta1.MachineAuthority
+		existingAnnotations    map[string]string
+		expectedAnnotations    map[string]string
+		expectErr              bool
 	}{
 		{
-			name:                "with no instanceType set",
-			instanceType:        "",
-			existingAnnotations: make(map[string]string),
-			expectedAnnotations: make(map[string]string),
+			name:                   "with no instanceType set",
+			instanceType:           "",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
+			expectedAnnotations:    make(map[string]string),
 			// Expect no error and only log entry in such case as we don't update instance types dynamically
 			expectErr: false,
 		},
 		{
-			name:                "with a a1.2xlarge",
-			instanceType:        "a1.2xlarge",
-			existingAnnotations: make(map[string]string),
+			name:                   "with a a1.2xlarge",
+			instanceType:           "a1.2xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "8",
 				memoryKey: "16384",
@@ -278,9 +296,10 @@ func TestReconcile(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:                "with a p2.16xlarge",
-			instanceType:        "p2.16xlarge",
-			existingAnnotations: make(map[string]string),
+			name:                   "with a p2.16xlarge",
+			instanceType:           "p2.16xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "64",
 				memoryKey: "749568",
@@ -296,6 +315,7 @@ func TestReconcile(t *testing.T) {
 				"existing": "annotation",
 				"annother": "existingAnnotation",
 			},
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
 			expectedAnnotations: map[string]string{
 				"existing": "annotation",
 				"annother": "existingAnnotation",
@@ -313,6 +333,7 @@ func TestReconcile(t *testing.T) {
 				"existing": "annotation",
 				"annother": "existingAnnotation",
 			},
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
 			expectedAnnotations: map[string]string{
 				"existing": "annotation",
 				"annother": "existingAnnotation",
@@ -321,9 +342,10 @@ func TestReconcile(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:                "with a m6g.4xlarge (aarch64)",
-			instanceType:        "m6g.4xlarge",
-			existingAnnotations: make(map[string]string),
+			name:                   "with a m6g.4xlarge (aarch64)",
+			instanceType:           "m6g.4xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "16",
 				memoryKey: "65536",
@@ -333,9 +355,10 @@ func TestReconcile(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:                "with an instance type missing the supported architecture (default to amd64)",
-			instanceType:        "m6i.8xlarge",
-			existingAnnotations: make(map[string]string),
+			name:                   "with an instance type missing the supported architecture (default to amd64)",
+			instanceType:           "m6i.8xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "32",
 				memoryKey: "131072",
@@ -345,9 +368,10 @@ func TestReconcile(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:                "with an unrecognized supported architecture (default to amd64)",
-			instanceType:        "m6h.8xlarge",
-			existingAnnotations: make(map[string]string),
+			name:                   "with an unrecognized supported architecture (default to amd64)",
+			instanceType:           "m6h.8xlarge",
+			statusAuthoritativeAPI: machinev1beta1.MachineAuthorityMachineAPI,
+			existingAnnotations:    make(map[string]string),
 			expectedAnnotations: map[string]string{
 				cpuKey:    "32",
 				memoryKey: "131072",
@@ -362,7 +386,7 @@ func TestReconcile(t *testing.T) {
 		t.Run(tc.name, func(tt *testing.T) {
 			g := NewWithT(tt)
 
-			machineSet, err := newTestMachineSet("default", tc.instanceType, tc.existingAnnotations)
+			machineSet, err := newTestMachineSet("default", tc.instanceType, tc.existingAnnotations, tc.statusAuthoritativeAPI)
 			g.Expect(err).ToNot(HaveOccurred())
 
 			fakeClient, err := fakeawsclient.NewClient(nil, "", "", "")
@@ -410,7 +434,7 @@ func TestNormalizeArchitecture(t *testing.T) {
 	}
 }
 
-func newTestMachineSet(namespace string, instanceType string, existingAnnotations map[string]string) (*machinev1beta1.MachineSet, error) {
+func newTestMachineSet(namespace string, instanceType string, existingAnnotations map[string]string, statusAuthoritativeAPI machinev1beta1.MachineAuthority) (*machinev1beta1.MachineSet, error) {
 	// Copy anntotations map so we don't modify the input
 	annotations := make(map[string]string)
 	for k, v := range existingAnnotations {
@@ -442,6 +466,9 @@ func newTestMachineSet(namespace string, instanceType string, existingAnnotation
 					ProviderSpec: providerSpec,
 				},
 			},
+		},
+		Status: machinev1beta1.MachineSetStatus{
+			AuthoritativeAPI: statusAuthoritativeAPI,
 		},
 	}, nil
 }

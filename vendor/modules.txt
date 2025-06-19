@@ -300,7 +300,7 @@ github.com/openshift/client-go/machine/listers/machine/v1beta1
 github.com/openshift/library-go/pkg/config/clusterstatus
 github.com/openshift/library-go/pkg/config/leaderelection
 github.com/openshift/library-go/pkg/features
-# github.com/openshift/machine-api-operator v0.2.1-0.20250506123515-c34e59369dfb
+# github.com/openshift/machine-api-operator v0.2.1-0.20250506123515-c34e59369dfb => github.com/damdo/machine-api-operator v0.2.1-0.20250619164931-9ddbe20e0281
 ## explicit; go 1.23.0
 github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics
@@ -1180,3 +1180,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
 sigs.k8s.io/yaml/goyaml.v3
+# github.com/openshift/machine-api-operator => github.com/damdo/machine-api-operator v0.2.1-0.20250619164931-9ddbe20e0281

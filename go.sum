@@ -87,6 +87,8 @@ github.com/curioswitch/go-reassign v0.3.0 h1:dh3kpQHuADL3cobV/sSGETA8DOv457dwl+f
 github.com/curioswitch/go-reassign v0.3.0/go.mod h1:nApPCCTtqLJN/s8HfItCcKV0jIPwluBOvZP+dsJGA88=
 github.com/daixiang0/gci v0.13.5 h1:kThgmH1yBmZSBCh1EJVxQ7JsHpm5Oms0AMed/0LaH4c=
 github.com/daixiang0/gci v0.13.5/go.mod h1:12etP2OniiIdP4q+kjUGrC/rUagga7ODbqsom5Eo5Yk=
+github.com/damdo/machine-api-operator v0.2.1-0.20250619164931-9ddbe20e0281 h1:Ki3IW95ICJpvTF0G/qA+dliU0kkBQPtpoL8ovUiUu3E=
+github.com/damdo/machine-api-operator v0.2.1-0.20250619164931-9ddbe20e0281/go.mod h1:1fnQ4CMfwvkLTRafNW3aSC/9w73vbYW6h4ogM0sALgw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
@@ -349,8 +351,6 @@ github.com/openshift/cluster-control-plane-machine-set-operator v0.0.0-202501281
 github.com/openshift/cluster-control-plane-machine-set-operator v0.0.0-20250128131205-c7b3d7b57a8e/go.mod h1:ae3TvkWGFUuKQAnypbtiVMXxBlRfJGbf37z5zVh98uA=
 github.com/openshift/library-go v0.0.0-20250203131244-80620876b7c2 h1:LaJmI+EeFnpbxs5H4Y6KOiNXhtPjldqvNzVfPpNM+dI=
 github.com/openshift/library-go v0.0.0-20250203131244-80620876b7c2/go.mod h1:GHwvopE5KXXCz4ULHp871sTPLLW+FB+hu/RIzlNwxx8=
-github.com/openshift/machine-api-operator v0.2.1-0.20250506123515-c34e59369dfb h1:VnMcFYS1Do23IoW1n7/tKs+CzK3BdYfxRSOflG9DyrU=
-github.com/openshift/machine-api-operator v0.2.1-0.20250506123515-c34e59369dfb/go.mod h1:YHka8F8yTPUeDhgXtBW4KKw46uT7UwYj3LghJsVr7YQ=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
 github.com/pelletier/go-toml/v2 v2.2.3/go.mod h1:MfCQTFTvCcUyyvvwm1+G6H/jORL20Xlb6rzQu9GuUkc=
 github.com/peterbourgon/diskv v2.0.1+incompatible h1:UBdAOUP5p4RWqPBg048CAvpKN+vxiaj6gdUUzhl4XmI=

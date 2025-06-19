@@ -11,7 +11,7 @@ require (
 	github.com/onsi/gomega v1.36.2
 	github.com/openshift/api v0.0.0-20250528100135-a463917701ab
 	github.com/openshift/library-go v0.0.0-20250203131244-80620876b7c2
-	github.com/openshift/machine-api-operator v0.2.1-0.20250506123515-c34e59369dfb
+	github.com/openshift/machine-api-operator v0.2.1-0.20250704070513-81d86b5a1ef5
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
 	k8s.io/apiserver v0.32.2

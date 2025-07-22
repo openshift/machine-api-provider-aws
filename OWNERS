@@ -5,17 +5,15 @@ approvers:
 - JoelSpeed
 - RadekManak
 - damdo
-- elmiko
-- nrb
-- theobarberbany
-reviewers:
-- JoelSpeed
-- RadekManak
-- damdo
-- elmiko
 - nrb
 - racheljpg
-- sub-mod
+- theobarberbany
+reviewers:
+- RadekManak
+- damdo
+- mdbooth
+- nrb
+- racheljpg
 - theobarberbany
 component: Cloud Compute
-subcomponent: Machine API Provider
+subcomponent: Machine API Providers

@@ -20,8 +20,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +45,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machineapiapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 //go:generate go run ../../vendor/github.com/golang/mock/mockgen -source=./client.go -destination=./mock/client_generated.go -package=mock
@@ -66,6 +67,11 @@ const (
 	cloudCABundleKey = "ca-bundle.pem"
 	// awsRegionsCacheExpirationDuration is the duration for which the AWS regions cache is valid
 	awsRegionsCacheExpirationDuration = time.Minute * 30
+)
+
+var (
+	sharedCredentialsFileMutex sync.Mutex
+	sharedCredentialsFileName  = path.Join(os.TempDir(), "aws-shared-credentials"+rand.String(16))
 )
 
 // AwsClientBuilderFuncType is function type for building aws client
@@ -369,10 +375,18 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 			}
 			return nil, err
 		}
+		sharedCredentialsFileMutex.Lock()
+		defer sharedCredentialsFileMutex.Unlock()
 		sharedCredsFile, err := sharedCredentialsFileFromSecret(&secret)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create shared credentials file from Secret: %v", err)
 		}
+
+		// Ensure the file gets deleted in any case.
+		defer func() {
+			os.Remove(sharedCredsFile)
+		}()
+
 		sessionOptions.SharedConfigState = session.SharedConfigEnable
 		sessionOptions.SharedConfigFiles = []string{sharedCredsFile}
 	}
@@ -390,11 +404,6 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 	s, err := session.NewSessionWithOptions(sessionOptions)
 	if err != nil {
 		return nil, err
-	}
-
-	// Remove any temporary shared credentials files after session creation so they don't accumulate
-	if len(sessionOptions.SharedConfigFiles) > 0 {
-		os.Remove(sessionOptions.SharedConfigFiles[0])
 	}
 
 	s.Handlers.Build.PushBackNamed(addProviderVersionToUserAgent)
@@ -471,12 +480,16 @@ func sharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
 		return "", fmt.Errorf("invalid secret for aws credentials")
 	}
 
-	f, err := ioutil.TempFile("", "aws-shared-credentials")
+	// Re-using the same file every time to prevent leakage of memory to slab.
+	// Related issue: https://issues.redhat.com/browse/RHEL-119532
+	f, err := os.Create(sharedCredentialsFileName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create file for shared credentials: %v", err)
 	}
 	defer f.Close()
 	if _, err := f.Write(data); err != nil {
+		// Delete the file in case of having an error. Otherwise the calling function needs to handle deletion.
+		defer func() { os.Remove(f.Name()) }()
 		return "", fmt.Errorf("failed to write credentials to %s: %v", f.Name(), err)
 	}
 	return f.Name(), nil

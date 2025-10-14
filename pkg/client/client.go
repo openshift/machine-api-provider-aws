@@ -360,7 +360,7 @@ func NewValidatedClient(ctrlRuntimeClient client.Client, secretName, namespace, 
 	}, nil
 }
 
-func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (*session.Session, error) {
+func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (s *session.Session, err error) {
 	sessionOptions := session.Options{
 		Config: aws.Config{
 			Region: aws.String(region),
@@ -384,7 +384,9 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 
 		// Ensure the file gets deleted in any case.
 		defer func() {
-			os.Remove(sharedCredsFile)
+			if removeErr := os.Remove(sharedCredsFile); removeErr != nil && err == nil {
+				err = fmt.Errorf("failed to remove shared credentials file %s: %v", sharedCredsFile, removeErr)
+			}
 		}()
 
 		sessionOptions.SharedConfigState = session.SharedConfigEnable
@@ -401,7 +403,7 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 	}
 
 	// Otherwise default to relying on the IAM role of the masters where the actuator is running:
-	s, err := session.NewSessionWithOptions(sessionOptions)
+	s, err = session.NewSessionWithOptions(sessionOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +468,7 @@ func buildCustomEndpointsMap(customEndpoints []configv1.AWSServiceEndpoint) map[
 
 // sharedCredentialsFileFromSecret returns a location (path) to the shared credentials
 // file that was created using the provided secret
-func sharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
+func sharedCredentialsFileFromSecret(secret *corev1.Secret) (filename string, err error) {
 	var data []byte
 	switch {
 	case len(secret.Data["credentials"]) > 0:
@@ -486,10 +488,18 @@ func sharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create file for shared credentials: %v", err)
 	}
-	defer f.Close()
-	if _, err := f.Write(data); err != nil {
+
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("failed to close file %s: %v", f.Name(), closeErr)
+		}
+	}()
+
+	if _, err = f.Write(data); err != nil {
 		// Delete the file in case of having an error. Otherwise the calling function needs to handle deletion.
-		defer func() { os.Remove(f.Name()) }()
+		if deleteErr := os.Remove(f.Name()); deleteErr != nil {
+			return "", fmt.Errorf("failed to write credentials to %s and delete it afterwards: %v, %v", f.Name(), err, deleteErr)
+		}
 		return "", fmt.Errorf("failed to write credentials to %s: %v", f.Name(), err)
 	}
 	return f.Name(), nil

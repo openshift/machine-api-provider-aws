@@ -20,8 +20,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +45,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machineapiapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 //go:generate go run ../../vendor/github.com/golang/mock/mockgen -source=./client.go -destination=./mock/client_generated.go -package=mock
@@ -67,11 +66,6 @@ const (
 	cloudCABundleKey = "ca-bundle.pem"
 	// awsRegionsCacheExpirationDuration is the duration for which the AWS regions cache is valid
 	awsRegionsCacheExpirationDuration = time.Minute * 30
-)
-
-var (
-	sharedCredentialsFileMutex sync.Mutex
-	sharedCredentialsFileName  = path.Join(os.TempDir(), "aws-shared-credentials"+rand.String(16))
 )
 
 // AwsClientBuilderFuncType is function type for building aws client
@@ -360,7 +354,7 @@ func NewValidatedClient(ctrlRuntimeClient client.Client, secretName, namespace, 
 	}, nil
 }
 
-func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (s *session.Session, err error) {
+func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (*session.Session, error) {
 	sessionOptions := session.Options{
 		Config: aws.Config{
 			Region: aws.String(region),
@@ -375,20 +369,10 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 			}
 			return nil, err
 		}
-		sharedCredentialsFileMutex.Lock()
-		defer sharedCredentialsFileMutex.Unlock()
 		sharedCredsFile, err := sharedCredentialsFileFromSecret(&secret)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create shared credentials file from Secret: %v", err)
 		}
-
-		// Ensure the file gets deleted in any case.
-		defer func() {
-			if removeErr := os.Remove(sharedCredsFile); removeErr != nil && err == nil {
-				err = fmt.Errorf("failed to remove shared credentials file %s: %v", sharedCredsFile, removeErr)
-			}
-		}()
-
 		sessionOptions.SharedConfigState = session.SharedConfigEnable
 		sessionOptions.SharedConfigFiles = []string{sharedCredsFile}
 	}
@@ -403,9 +387,14 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 	}
 
 	// Otherwise default to relying on the IAM role of the masters where the actuator is running:
-	s, err = session.NewSessionWithOptions(sessionOptions)
+	s, err := session.NewSessionWithOptions(sessionOptions)
 	if err != nil {
 		return nil, err
+	}
+
+	// Remove any temporary shared credentials files after session creation so they don't accumulate
+	if len(sessionOptions.SharedConfigFiles) > 0 {
+		os.Remove(sessionOptions.SharedConfigFiles[0])
 	}
 
 	s.Handlers.Build.PushBackNamed(addProviderVersionToUserAgent)
@@ -468,7 +457,7 @@ func buildCustomEndpointsMap(customEndpoints []configv1.AWSServiceEndpoint) map[
 
 // sharedCredentialsFileFromSecret returns a location (path) to the shared credentials
 // file that was created using the provided secret
-func sharedCredentialsFileFromSecret(secret *corev1.Secret) (filename string, err error) {
+func sharedCredentialsFileFromSecret(secret *corev1.Secret) (string, error) {
 	var data []byte
 	switch {
 	case len(secret.Data["credentials"]) > 0:
@@ -482,24 +471,12 @@ func sharedCredentialsFileFromSecret(secret *corev1.Secret) (filename string, er
 		return "", fmt.Errorf("invalid secret for aws credentials")
 	}
 
-	// Re-using the same file every time to prevent leakage of memory to slab.
-	// Related issue: https://issues.redhat.com/browse/RHEL-119532
-	f, err := os.Create(sharedCredentialsFileName)
+	f, err := ioutil.TempFile("", "aws-shared-credentials")
 	if err != nil {
 		return "", fmt.Errorf("failed to create file for shared credentials: %v", err)
 	}
-
-	defer func() {
-		if closeErr := f.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("failed to close file %s: %v", f.Name(), closeErr)
-		}
-	}()
-
-	if _, err = f.Write(data); err != nil {
-		// Delete the file in case of having an error. Otherwise the calling function needs to handle deletion.
-		if deleteErr := os.Remove(f.Name()); deleteErr != nil {
-			return "", fmt.Errorf("failed to write credentials to %s and delete it afterwards: %v, %v", f.Name(), err, deleteErr)
-		}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
 		return "", fmt.Errorf("failed to write credentials to %s: %v", f.Name(), err)
 	}
 	return f.Name(), nil

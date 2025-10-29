@@ -316,6 +316,7 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 		}
 
 		// IOPS settings are only valid on IO1, IO2 and GP3 block devices
+		// Throughput settings are only valid on GP3 block devices
 		// https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/create-volume.html
 		switch aws.StringValue(volumeType) {
 		case ec2.VolumeTypeIo1, ec2.VolumeTypeIo2, ec2.VolumeTypeGp3:
@@ -324,6 +325,9 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 			// 0 Iops is below the minimum so AWS will fail the instance create request if we send a 0 value.
 			if blockDeviceMappingSpec.EBS.Iops != nil && *blockDeviceMappingSpec.EBS.Iops > 0 {
 				blockDeviceMapping.Ebs.Iops = blockDeviceMappingSpec.EBS.Iops
+			}
+			if aws.StringValue(volumeType) == ec2.VolumeTypeGp3 && blockDeviceMappingSpec.EBS.ThroughputMib != nil && *blockDeviceMappingSpec.EBS.ThroughputMib > 0 {
+				blockDeviceMapping.Ebs.Throughput = aws.Int64(int64(*blockDeviceMappingSpec.EBS.ThroughputMib))
 			}
 		}
 

@@ -468,6 +468,7 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		MetadataOptions:                  getInstanceMetadataOptionsRequest(machineProviderConfig),
 		InstanceMarketOptions:            instanceMarketOptions,
 		CapacityReservationSpecification: capacityReservationSpecification,
+		CpuOptions:                       getCPUOptionsRequest(machineProviderConfig),
 	}
 
 	if len(blockDeviceMappings) > 0 {
@@ -708,4 +709,27 @@ func getCapacityReservationSpecification(capacityReservationID string) (*ec2.Cap
 			CapacityReservationId: aws.String(capacityReservationID),
 		},
 	}, nil
+}
+
+func getCPUOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.CpuOptionsRequest {
+	if providerConfig.CPUOptions == nil {
+		return nil
+	}
+
+	cpuOptions := &ec2.CpuOptionsRequest{}
+
+	if providerConfig.CPUOptions.ConfidentialCompute != nil {
+		switch *providerConfig.CPUOptions.ConfidentialCompute {
+		case machinev1beta1.AWSConfidentialComputePolicySEVSNP:
+			cpuOptions.AmdSevSnp = aws.String(ec2.AmdSevSnpSpecificationEnabled)
+		case machinev1beta1.AWSConfidentialComputePolicyDisabled:
+			cpuOptions.AmdSevSnp = aws.String(ec2.AmdSevSnpSpecificationDisabled)
+		}
+	}
+
+	if *cpuOptions == (ec2.CpuOptionsRequest{}) {
+		return nil
+	}
+
+	return cpuOptions
 }

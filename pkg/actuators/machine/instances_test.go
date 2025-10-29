@@ -16,6 +16,7 @@ import (
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -1692,6 +1693,56 @@ func TestGetCapacityReservationSpecification(t *testing.T) {
 				g.Expect(err).To(gmg.BeEquivalentTo(tc.expectedError))
 			}
 
+		})
+	}
+}
+
+func TestGetCPUOptionsRequest(t *testing.T) {
+	testCases := []struct {
+		name            string
+		providerConfig  *machinev1beta1.AWSMachineProviderConfig
+		expectedRequest *ec2.CpuOptionsRequest
+	}{
+		{
+			name:            "with CPUOptions unspecified",
+			providerConfig:  &machinev1beta1.AWSMachineProviderConfig{},
+			expectedRequest: nil,
+		},
+		{
+			name: "with ConfidentialCompute set to AMD SEV-SNP",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					ConfidentialCompute: ptr.To(machinev1beta1.AWSConfidentialComputePolicySEVSNP),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				AmdSevSnp: aws.String(ec2.AmdSevSnpSpecificationEnabled),
+			},
+		},
+		{
+			name: "with ConfidentialCompute disabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					ConfidentialCompute: ptr.To(machinev1beta1.AWSConfidentialComputePolicyDisabled),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				AmdSevSnp: aws.String(ec2.AmdSevSnpSpecificationDisabled),
+			},
+		},
+		{
+			name: "with ConfidentialCompute unspecified",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{},
+			},
+			expectedRequest: nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gmg.NewWithT(t)
+			req := getCPUOptionsRequest(tc.providerConfig)
+			g.Expect(req).To(gmg.BeEquivalentTo(tc.expectedRequest))
 		})
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
@@ -15,6 +14,7 @@ import (
 	testutils "github.com/openshift/machine-api-operator/pkg/util/testing"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
+	"go.uber.org/mock/gomock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"

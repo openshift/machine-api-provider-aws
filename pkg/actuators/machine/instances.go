@@ -13,12 +13,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
+
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	mapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/metrics"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -664,6 +666,46 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 			machinev1beta1.DefaultTenancy,
 			machinev1beta1.DedicatedTenancy,
 			machinev1beta1.HostTenancy)
+	}
+
+	// Dedicated host logic
+	mapiPlacement := machineProviderConfig.Placement
+	if mapiPlacement.Host != nil {
+		hostAffinity := mapiPlacement.Host.Affinity
+		switch *hostAffinity {
+		case machinev1beta1.HostAffinityAnyAvailable:
+			placement.Affinity = aws.String("default")
+		case machinev1beta1.HostAffinityDedicatedHost:
+			placement.Affinity = aws.String("host")
+
+			// HostAffinityDedicatedHost requires host to be set
+			if mapiPlacement.Host.DedicatedHost == nil || mapiPlacement.Host.DedicatedHost.ID == "" {
+				return nil, mapierrors.InvalidMachineConfiguration("host affinity %v requires dedicated host ID to be provided", machinev1beta1.HostAffinityDedicatedHost)
+			}
+		default:
+			return nil, mapierrors.InvalidMachineConfiguration("invalid host affinity: %v", *hostAffinity)
+		}
+
+		// Set Host ID if set
+		var hostID *string
+		if mapiPlacement.Host.DedicatedHost != nil {
+			hostID = ptr.To(mapiPlacement.Host.DedicatedHost.ID)
+		}
+
+		klog.V(2).Info("Running instance with dedicated host placement",
+			"hostId", hostID,
+			"affinity", mapiPlacement.Host.Affinity)
+
+		var tenancy *string
+		if mapiPlacement.Tenancy != "" {
+			tenancy = ptr.To(string(machinev1beta1.HostTenancy))
+		}
+
+		placement = &ec2.Placement{
+			Tenancy:  tenancy,
+			Affinity: placement.Affinity,
+			HostId:   hostID,
+		}
 	}
 
 	if *placement == (ec2.Placement{}) {

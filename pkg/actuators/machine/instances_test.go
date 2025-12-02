@@ -1746,3 +1746,94 @@ func TestGetCPUOptionsRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
+	hostID := "h-0123456789abcdef0"
+	testCases := []struct {
+		name     string
+		mutate   func(pc *machinev1beta1.AWSMachineProviderConfig)
+		expected *ec2.Placement
+		wantErr  bool
+	}{
+		{
+			name: "AnyAvailable sets Affinity default, no Tenancy, no HostId",
+			mutate: func(pc *machinev1beta1.AWSMachineProviderConfig) {
+				pc.Placement.Host = &machinev1beta1.HostPlacement{
+					Affinity: ptr.To(machinev1beta1.HostAffinityAnyAvailable),
+				}
+			},
+			expected: &ec2.Placement{
+				Affinity: aws.String("default"),
+			},
+		},
+		{
+			name: "DedicatedHost sets Tenancy host and HostId",
+			mutate: func(pc *machinev1beta1.AWSMachineProviderConfig) {
+				pc.Placement = machinev1beta1.Placement{
+					Tenancy: machinev1beta1.HostTenancy,
+					Host: &machinev1beta1.HostPlacement{
+						Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+						DedicatedHost: &machinev1beta1.DedicatedHost{
+							ID: hostID},
+					},
+				}
+			},
+			expected: &ec2.Placement{
+				Affinity: aws.String("host"),
+				Tenancy:  aws.String("host"),
+				HostId:   ptr.To(hostID),
+			},
+		},
+		{
+			name: "DedicatedHost overwrites existing placement fields",
+			mutate: func(pc *machinev1beta1.AWSMachineProviderConfig) {
+				pc.PlacementGroupName = "placement-group1"
+				pc.PlacementGroupPartition = ptr.To(int32(3))
+				pc.Placement = machinev1beta1.Placement{
+					Tenancy: machinev1beta1.HostTenancy,
+					Host: &machinev1beta1.HostPlacement{
+						Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+						DedicatedHost: &machinev1beta1.DedicatedHost{
+							ID: hostID},
+					},
+				}
+			},
+			expected: &ec2.Placement{
+				Tenancy:  aws.String("host"),
+				Affinity: aws.String("host"),
+				HostId:   ptr.To(hostID),
+			},
+		},
+		{
+			name: "DedicatedHost without ID returns error",
+			mutate: func(pc *machinev1beta1.AWSMachineProviderConfig) {
+				pc.Placement.Host = &machinev1beta1.HostPlacement{
+					Affinity:      ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+					DedicatedHost: &machinev1beta1.DedicatedHost{ID: ""},
+				}
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gmg.NewWithT(t)
+
+			m, err := stubMachine()
+			if err != nil {
+				t.Fatalf("Unable to build test machine manifest: %v", err)
+			}
+			pc := stubProviderConfig()
+			tc.mutate(pc)
+
+			got, cerr := constructInstancePlacement(m, pc, fake.NewFakeClient())
+			if tc.wantErr {
+				g.Expect(cerr).To(gmg.HaveOccurred())
+				return
+			}
+			g.Expect(cerr).ToNot(gmg.HaveOccurred())
+			g.Expect(got).To(gmg.BeEquivalentTo(tc.expected))
+		})
+	}
+}

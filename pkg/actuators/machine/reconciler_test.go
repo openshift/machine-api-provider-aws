@@ -568,11 +568,12 @@ func TestCreate(t *testing.T) {
 
 func TestExists(t *testing.T) {
 	testCases := []struct {
-		name          string
-		machine       func() *machinev1beta1.Machine
-		expectedError error
-		existsResult  bool
-		awsClient     func(ctrl *gomock.Controller) awsclient.Client
+		name           string
+		machine        func() *machinev1beta1.Machine
+		providerStatus func() *machinev1beta1.AWSMachineProviderStatus
+		expectedError  error
+		existsResult   bool
+		awsClient      func(ctrl *gomock.Controller) awsclient.Client
 	}{
 		{
 			name: "Successfully find created instance",
@@ -601,12 +602,12 @@ func TestExists(t *testing.T) {
 					t.Fatalf("unable to build stub machine: %v", err)
 				}
 
-				machine.Spec.ProviderID = func() *string {
-					providerID := "test"
-					return &providerID
-				}()
-
 				return machine
+			},
+			providerStatus: func() *machinev1beta1.AWSMachineProviderStatus {
+				return &machinev1beta1.AWSMachineProviderStatus{
+					InstanceID: aws.String("test-id"),
+				}
 			},
 			existsResult:  false,
 			expectedError: &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second},
@@ -661,11 +662,20 @@ func TestExists(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
+			machine := tc.machine()
+			if tc.providerStatus != nil {
+				var err error
+				machine.Status.ProviderStatus, err = RawExtensionFromProviderStatus(tc.providerStatus())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
 			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
 
 			machineScope, err := newMachineScope(machineScopeParams{
 				client:  fakeClient,
-				machine: tc.machine(),
+				machine: machine,
 				awsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 					return tc.awsClient(ctrl), nil
 				},
@@ -703,10 +713,11 @@ func TestExists(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	// TODO: check machine object after calling update()
 	testCases := []struct {
-		name          string
-		machine       func() *machinev1beta1.Machine
-		expectedError error
-		awsClient     func(ctrl *gomock.Controller) awsclient.Client
+		name           string
+		machine        func() *machinev1beta1.Machine
+		providerStatus func() *machinev1beta1.AWSMachineProviderStatus
+		expectedError  error
+		awsClient      func(ctrl *gomock.Controller) awsclient.Client
 	}{
 		{
 			name: "Successfully update the machine",
@@ -742,14 +753,13 @@ func TestUpdate(t *testing.T) {
 					t.Fatalf("unable to build stub machine: %v", err)
 				}
 
-				machine.Spec.ProviderID = func() *string {
-					providerID := "test"
-					return &providerID
-				}()
-
 				return machine
 			},
-
+			providerStatus: func() *machinev1beta1.AWSMachineProviderStatus {
+				return &machinev1beta1.AWSMachineProviderStatus{
+					InstanceID: aws.String("test-id"),
+				}
+			},
 			expectedError: &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second},
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
@@ -770,10 +780,19 @@ func TestUpdate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(tc.machine(), stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
+			machine := tc.machine()
+			if tc.providerStatus != nil {
+				var err error
+				machine.Status.ProviderStatus, err = RawExtensionFromProviderStatus(tc.providerStatus())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			fakeClient := fake.NewClientBuilder().WithRuntimeObjects(machine, stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
 			machineScope, err := newMachineScope(machineScopeParams{
 				client:  fakeClient,
-				machine: tc.machine(),
+				machine: machine,
 				awsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
 					return tc.awsClient(ctrl), nil
 				},

@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	errorutil "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -206,7 +207,20 @@ func (r *Reconciler) update() error {
 			return &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}
 
+		// We should only ever get here either if the Machine has been created and then disappeared between Exists and Update,
+		// or if getMachineInstances is providing inconsistent results AND we have blasted through the eventual consistency delay.
+
 		klog.Warningf("%s: attempted to update machine but no instances found", r.machine.Name)
+
+		if r.providerStatus.InstanceID == nil || *r.providerStatus.InstanceID == "" {
+			// In this case, we got a response saying that the machine existed, but we have no provider ID in spec.
+			// This means we never completed an Update flow.
+			// Set the provider ID before we clear the status, this will force the machine into failed.
+			err = r.setProviderID(&ec2.Instance{InstanceId: r.providerStatus.InstanceID, Placement: &ec2.Placement{AvailabilityZone: ptr.To(r.providerSpec.Placement.AvailabilityZone)}})
+			if err != nil {
+				return fmt.Errorf("failed to set provider ID: %w", err)
+			}
+		}
 
 		// Update status to clear out machine details.
 		r.machineScope.setProviderStatus(nil, conditionSuccess())

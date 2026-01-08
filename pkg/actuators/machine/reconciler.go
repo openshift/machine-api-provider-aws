@@ -197,7 +197,11 @@ func (r *Reconciler) update() error {
 
 	existingLen := len(existingInstances)
 	if existingLen == 0 {
-		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
+		// If the machine has a provider status instance ID, the instance was created, but we have not yet seen it on AWS to be able to set the addresses.
+		// Once we first see it on AWS, we set the addresses, the machine moves to provisioned, and we get a spec provider ID.
+		// If we are at this point in the code and have addresses, then we have seen the instance previously, but it is now gone.
+		// Clearing the provider status will cause exists to fail, that in combination with the spec provider ID existing will cause the machine to then go into failed.
+		if r.providerStatus.InstanceID != nil && *r.providerStatus.InstanceID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}
@@ -288,7 +292,10 @@ func (r *Reconciler) exists() (bool, error) {
 	}
 
 	if len(existingInstances) == 0 {
-		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
+		// If the machine has a provider status instance ID, the instance was created, but we have not yet seen it on AWS to be able to set the addresses.
+		// Once we first see it on AWS, we set the addresses, the machine moves to provisioned, and we get a spec provider ID.
+		// If we return false after this point, the machine will go into failed, as the instnace previously existed but now is gone.
+		if r.providerStatus.InstanceID != nil && *r.providerStatus.InstanceID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return false, &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}

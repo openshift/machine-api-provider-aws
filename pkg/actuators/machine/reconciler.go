@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	errorutil "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -213,12 +214,29 @@ func (r *Reconciler) update() error {
 
 	existingLen := len(existingInstances)
 	if existingLen == 0 {
-		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
+		// If the machine has a provider status instance ID, the instance was created, but we have not yet seen it on AWS to be able to set the addresses.
+		// Once we first see it on AWS, we set the addresses, the machine moves to provisioned, and we get a spec provider ID.
+		// If we are at this point in the code and have addresses, then we have seen the instance previously, but it is now gone.
+		// Clearing the provider status will cause exists to fail, that in combination with the spec provider ID existing will cause the machine to then go into failed.
+		if r.providerStatus.InstanceID != nil && *r.providerStatus.InstanceID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}
 
+		// We should only ever get here either if the Machine has been created and then disappeared between Exists and Update,
+		// or if getMachineInstances is providing inconsistent results AND we have blasted through the eventual consistency delay.
+
 		klog.Warningf("%s: attempted to update machine but no instances found", r.machine.Name)
+
+		if r.providerStatus.InstanceID == nil || *r.providerStatus.InstanceID == "" {
+			// In this case, we got a response saying that the machine existed, but we have no provider ID in spec.
+			// This means we never completed an Update flow.
+			// Set the provider ID before we clear the status, this will force the machine into failed.
+			err = r.setProviderID(&ec2.Instance{InstanceId: r.providerStatus.InstanceID, Placement: &ec2.Placement{AvailabilityZone: ptr.To(r.providerSpec.Placement.AvailabilityZone)}})
+			if err != nil {
+				return fmt.Errorf("failed to set provider ID: %w", err)
+			}
+		}
 
 		// Update status to clear out machine details.
 		r.machineScope.setProviderStatus(nil, conditionSuccess())
@@ -304,7 +322,10 @@ func (r *Reconciler) exists() (bool, error) {
 	}
 
 	if len(existingInstances) == 0 {
-		if r.machine.Spec.ProviderID != nil && *r.machine.Spec.ProviderID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
+		// If the machine has a provider status instance ID, the instance was created, but we have not yet seen it on AWS to be able to set the addresses.
+		// Once we first see it on AWS, we set the addresses, the machine moves to provisioned, and we get a spec provider ID.
+		// If we return false after this point, the machine will go into failed, as the instnace previously existed but now is gone.
+		if r.providerStatus.InstanceID != nil && *r.providerStatus.InstanceID != "" && len(r.machine.Status.Addresses) == 0 && (r.machine.Status.LastUpdated == nil || r.machine.Status.LastUpdated.Add(requeueAfterSeconds*time.Second).After(time.Now())) {
 			klog.Infof("%s: Possible eventual-consistency discrepancy; returning an error to requeue", r.machine.Name)
 			return false, &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 		}

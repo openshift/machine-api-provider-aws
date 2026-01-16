@@ -2,6 +2,8 @@ module github.com/openshift/machine-api-provider-aws
 
 go 1.24.0
 
+replace github.com/openshift/api => ../api
+
 require (
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/blang/semver v3.5.1+incompatible

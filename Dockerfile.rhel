@@ -5,7 +5,7 @@ COPY . .
 RUN unset VERSION \
  && GOPROXY=off NO_DOCKER=1 make build
 
-FROM registry.ci.openshift.org/ocp/4.22:base-rhel9
+FROM registry.ci.openshift.org/ocp/4.22:base-rhel9-minimal
 COPY --from=builder /go/src/github.com/openshift/machine-api-provider-aws/bin/machine-controller-manager /
 COPY --from=builder /go/src/github.com/openshift/machine-api-provider-aws/bin/termination-handler /
 

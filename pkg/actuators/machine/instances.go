@@ -719,6 +719,7 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.InstanceMetadataOptionsRequest {
 	imdsOptions := &ec2.InstanceMetadataOptionsRequest{}
 
+	// Handle Authentication (HttpTokens)
 	switch providerConfig.MetadataServiceOptions.Authentication {
 	case "":
 		// not set, let aws to pick a default. `optional` at this point.
@@ -727,6 +728,31 @@ func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachine
 		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateOptional)
 	case machinev1beta1.MetadataServiceAuthenticationRequired:
 		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateRequired)
+	}
+
+	// Handle HTTPEndpoint
+	if providerConfig.MetadataServiceOptions.HTTPEndpoint != nil {
+		switch *providerConfig.MetadataServiceOptions.HTTPEndpoint {
+		case machinev1beta1.HTTPEndpointEnabled:
+			imdsOptions.HttpEndpoint = aws.String(ec2.InstanceMetadataEndpointStateEnabled)
+		case machinev1beta1.HTTPEndpointDisabled:
+			imdsOptions.HttpEndpoint = aws.String(ec2.InstanceMetadataEndpointStateDisabled)
+		}
+	}
+
+	// Handle HTTPPutResponseHopLimit
+	if providerConfig.MetadataServiceOptions.HTTPPutResponseHopLimit != nil {
+		imdsOptions.HttpPutResponseHopLimit = providerConfig.MetadataServiceOptions.HTTPPutResponseHopLimit
+	}
+
+	// Handle InstanceMetadataTags
+	if providerConfig.MetadataServiceOptions.InstanceMetadataTags != nil {
+		switch *providerConfig.MetadataServiceOptions.InstanceMetadataTags {
+		case machinev1beta1.InstanceMetadataTagsEnabled:
+			imdsOptions.InstanceMetadataTags = aws.String(ec2.InstanceMetadataTagsStateEnabled)
+		case machinev1beta1.InstanceMetadataTagsDisabled:
+			imdsOptions.InstanceMetadataTags = aws.String(ec2.InstanceMetadataTagsStateDisabled)
+		}
 	}
 
 	if *imdsOptions == (ec2.InstanceMetadataOptionsRequest{}) {

@@ -407,6 +407,26 @@ type AWSMachineProviderStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// dedicatedHost tracks the dynamically allocated dedicated host.
+	// This field is populated when DynamicHostAllocation is used.
+	// +optional
+	DedicatedHost *DedicatedHostStatus `json:"dedicatedHost,omitempty"`
+}
+
+// DedicatedHostStatus defines the observed state of a dynamically allocated dedicated host
+// associated with an AWSMachine. This struct is used to track the ID of the dedicated host.
+// +kubebuilder:validation:MinProperties=1
+type DedicatedHostStatus struct {
+	// id tracks the dynamically allocated dedicated host ID.
+	// This field is populated when DynamicHostAllocation is used.
+	// The value must start with "h-" followed by either 8 or 17 lowercase hexadecimal characters (0-9 and a-f).
+	// The use of 8 lowercase hexadecimal characters is for older legacy hosts that may not have been migrated to newer format.
+	// Must be either 10 or 19 characters in length.
+	// +kubebuilder:validation:XValidation:rule="self.matches('^h-([0-9a-f]{8}|[0-9a-f]{17})$')",message="hostID must start with 'h-' followed by either 8 or 17 lowercase hexadecimal characters (0-9 and a-f)"
+	// +kubebuilder:validation:MinLength=10
+	// +kubebuilder:validation:MaxLength=19
+	// +optional
+	ID *string `json:"id,omitempty"`
 }
 
 // MarketType describes the market type of an EC2 Instance
@@ -463,6 +483,7 @@ const (
 
 // AllocationStrategy selects how a dedicated host is provided to the system for assigning to the instance.
 // +kubebuilder:validation:Enum:=UserProvided;Dynamic
+// +enum
 type AllocationStrategy string
 
 const (

@@ -54,6 +54,7 @@ var map_AWSMachineProviderStatus = map[string]string{
 	"instanceId":    "instanceId is the instance ID of the machine created in AWS",
 	"instanceState": "instanceState is the state of the AWS instance for this machine",
 	"conditions":    "conditions is a set of conditions associated with the Machine to indicate errors or other status",
+	"dedicatedHost": "dedicatedHost tracks the dynamically allocated dedicated host. This field is populated when DynamicHostAllocation is used.",
 }
 
 func (AWSMachineProviderStatus) SwaggerDoc() map[string]string {
@@ -101,6 +102,15 @@ var map_DedicatedHost = map[string]string{
 
 func (DedicatedHost) SwaggerDoc() map[string]string {
 	return map_DedicatedHost
+}
+
+var map_DedicatedHostStatus = map[string]string{
+	"":   "DedicatedHostStatus defines the observed state of a dynamically allocated dedicated host associated with an AWSMachine. This struct is used to track the ID of the dedicated host.",
+	"id": "id tracks the dynamically allocated dedicated host ID. This field is populated when DynamicHostAllocation is used. The value must start with \"h-\" followed by either 8 or 17 lowercase hexadecimal characters (0-9 and a-f). The use of 8 lowercase hexadecimal characters is for older legacy hosts that may not have been migrated to newer format. Must be either 10 or 19 characters in length.",
+}
+
+func (DedicatedHostStatus) SwaggerDoc() map[string]string {
+	return map_DedicatedHostStatus
 }
 
 var map_DynamicHostAllocationSpec = map[string]string{

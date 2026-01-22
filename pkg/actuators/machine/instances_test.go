@@ -1194,7 +1194,7 @@ func TestLaunchInstance(t *testing.T) {
 
 			fakeClient := fake.NewFakeClient(tc.objects...)
 
-			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
+			_, _, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
 			t.Log(launchErr)
 			if launchErr == nil {
 				if !tc.succeeds {
@@ -1827,7 +1827,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 			pc := stubProviderConfig()
 			tc.mutate(pc)
 
-			got, cerr := constructInstancePlacement(m, pc, fake.NewFakeClient())
+			got, cerr := constructInstancePlacement(m, pc, fake.NewFakeClient(), "")
 			if tc.wantErr {
 				g.Expect(cerr).To(gmg.HaveOccurred())
 				return

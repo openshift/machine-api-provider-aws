@@ -87,6 +87,9 @@ type Client interface {
 	DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
 	DescribePlacementGroups(*ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error)
 	DescribeInstanceTypes(*ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error)
+	DescribeHosts(*ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error)
+	AllocateHosts(*ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error)
+	ReleaseHosts(*ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error)
 	RunInstances(*ec2.RunInstancesInput) (*ec2.Reservation, error)
 	DescribeInstances(*ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error)
 	TerminateInstances(*ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error)
@@ -139,6 +142,18 @@ func (c *awsClient) DescribePlacementGroups(input *ec2.DescribePlacementGroupsIn
 
 func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
 	return c.ec2Client.DescribeInstanceTypes(input)
+}
+
+func (c *awsClient) DescribeHosts(input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
+	return c.ec2Client.DescribeHosts(input)
+}
+
+func (c *awsClient) AllocateHosts(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+	return c.ec2Client.AllocateHosts(input)
+}
+
+func (c *awsClient) ReleaseHosts(input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+	return c.ec2Client.ReleaseHosts(input)
 }
 
 func (c *awsClient) RunInstances(input *ec2.RunInstancesInput) (*ec2.Reservation, error) {

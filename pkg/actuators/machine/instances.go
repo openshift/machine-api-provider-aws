@@ -443,19 +443,63 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		}
 	}
 
-	placement, err := constructInstancePlacement(machine, machineProviderConfig, client)
+	// Allocate dedicated host if needed for dynamic allocation
+	var allocatedHostID string
+	if shouldAllocateDedicatedHost(&machineProviderConfig.Placement) {
+		// Determine the availability zone for the dedicated host
+		availabilityZone := machineProviderConfig.Placement.AvailabilityZone
+		if availabilityZone == "" && len(subnetIDs) > 0 {
+			// Get availability zone from subnet
+			zoneName, err := getAvalabilityZoneFromSubnetID(*subnetIDs[0], awsClient)
+			if err != nil {
+				return nil, mapierrors.InvalidMachineConfiguration("error getting availability zone for dedicated host allocation: %v", err)
+			}
+			availabilityZone = zoneName
+		}
+		if availabilityZone == "" {
+			return nil, mapierrors.InvalidMachineConfiguration("availability zone is required for dedicated host allocation")
+		}
+
+		tags := getDynamicHostTags(&machineProviderConfig.Placement)
+		hostID, err := allocateDedicatedHost(awsClient, machineProviderConfig.InstanceType, availabilityZone, tags, machine.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate dedicated host: %w", err)
+		}
+		allocatedHostID = hostID
+		klog.Infof("Allocated dedicated host %s for machine %s", allocatedHostID, machine.Name)
+	}
+
+	placement, err := constructInstancePlacement(machine, machineProviderConfig, client, allocatedHostID)
 	if err != nil {
+		// If we allocated a host and placement construction failed, we should release it
+		if allocatedHostID != "" {
+			if releaseErr := releaseDedicatedHost(awsClient, allocatedHostID, machine.Name); releaseErr != nil {
+				klog.Errorf("Failed to release allocated dedicated host %s after placement construction error: %v", allocatedHostID, releaseErr)
+			}
+		}
 		return nil, err
 	}
 	capacityReservationSpecification, err := getCapacityReservationSpecification(machineProviderConfig.CapacityReservationID)
 
 	if err != nil {
+		// If we allocated a host and capacity reservation specification retrieval failed, release the host
+		if allocatedHostID != "" {
+			if releaseErr := releaseDedicatedHost(awsClient, allocatedHostID, machine.Name); releaseErr != nil {
+				klog.Errorf("Failed to release allocated dedicated host %s after capacity reservation error: %v", allocatedHostID, releaseErr)
+			}
+		}
 		return nil, err
 	}
 
 	instanceMarketOptions, err := getInstanceMarketOptionsRequest(machineProviderConfig)
 
 	if err != nil {
+		// If we allocated a host and market options retrieval failed, release the host
+		if allocatedHostID != "" {
+			if releaseErr := releaseDedicatedHost(awsClient, allocatedHostID, machine.Name); releaseErr != nil {
+				klog.Errorf("Failed to release allocated dedicated host %s after market options error: %v", allocatedHostID, releaseErr)
+			}
+		}
 		return nil, err
 	}
 
@@ -482,6 +526,13 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 	}
 	runResult, err := awsClient.RunInstances(&inputConfig)
 	if err != nil {
+		// If we allocated a host and instance creation failed, release the host
+		if allocatedHostID != "" {
+			if releaseErr := releaseDedicatedHost(awsClient, allocatedHostID, machine.Name); releaseErr != nil {
+				klog.Errorf("Failed to release allocated dedicated host %s after instance creation error: %v", allocatedHostID, releaseErr)
+			}
+		}
+
 		metrics.RegisterFailedInstanceCreate(&metrics.MachineLabels{
 			Name:      machine.Name,
 			Namespace: machine.Namespace,
@@ -640,7 +691,8 @@ func getInstanceMarketOptionsRequest(providerConfig *machinev1beta1.AWSMachinePr
 }
 
 // constructInstancePlacement configures the placement options for the RunInstances request
-func constructInstancePlacement(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, client runtimeclient.Client) (*ec2.Placement, error) {
+// allocatedHostID is an optional parameter that specifies a dynamically allocated dedicated host ID
+func constructInstancePlacement(machine *machinev1beta1.Machine, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig, client runtimeclient.Client, allocatedHostID string) (*ec2.Placement, error) {
 	placement := &ec2.Placement{}
 	if machineProviderConfig.Placement.AvailabilityZone != "" && machineProviderConfig.Subnet.ID == nil {
 		placement.SetAvailabilityZone(machineProviderConfig.Placement.AvailabilityZone)
@@ -678,17 +730,20 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 		case machinev1beta1.HostAffinityDedicatedHost:
 			placement.Affinity = aws.String("host")
 
-			// HostAffinityDedicatedHost requires host to be set
-			if mapiPlacement.Host.DedicatedHost == nil || mapiPlacement.Host.DedicatedHost.ID == "" {
-				return nil, mapierrors.InvalidMachineConfiguration("host affinity %v requires dedicated host ID to be provided", machinev1beta1.HostAffinityDedicatedHost)
+			// For dynamic allocation, host ID will be provided via allocatedHostID parameter
+			// For user-provided, host ID must be in the config
+			if allocatedHostID == "" && (mapiPlacement.Host.DedicatedHost == nil || mapiPlacement.Host.DedicatedHost.ID == "") {
+				return nil, mapierrors.InvalidMachineConfiguration("host affinity %v requires dedicated host ID to be provided or dynamically allocated", machinev1beta1.HostAffinityDedicatedHost)
 			}
 		default:
 			return nil, mapierrors.InvalidMachineConfiguration("invalid host affinity: %v", *hostAffinity)
 		}
 
-		// Set Host ID if set
+		// Set Host ID - use allocated host ID if provided, otherwise use the one from config
 		var hostID *string
-		if mapiPlacement.Host.DedicatedHost != nil {
+		if allocatedHostID != "" {
+			hostID = ptr.To(allocatedHostID)
+		} else if mapiPlacement.Host.DedicatedHost != nil && mapiPlacement.Host.DedicatedHost.ID != "" {
 			hostID = ptr.To(mapiPlacement.Host.DedicatedHost.ID)
 		}
 

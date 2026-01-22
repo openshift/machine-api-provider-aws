@@ -163,6 +163,12 @@ func (r *Reconciler) delete() error {
 			return fmt.Errorf("failed to remove instance from load balancers: %w", err)
 		}
 
+		// Check if we need to release a dynamically allocated dedicated host before terminating the instance
+		var allocatedHostID string
+		if len(existingInstances) > 0 {
+			allocatedHostID = getDynamicallyAllocatedHostID(existingInstances[0], r.providerSpec)
+		}
+
 		terminatingInstances, err = terminateInstances(r.awsClient, existingInstances)
 		if err != nil {
 			metrics.RegisterFailedInstanceDelete(&metrics.MachineLabels{
@@ -171,6 +177,16 @@ func (r *Reconciler) delete() error {
 				Reason:    "failed to delete instances",
 			})
 			return fmt.Errorf("failed to delete instaces: %w", err)
+		}
+
+		// Release dynamically allocated dedicated host if present
+		if allocatedHostID != "" {
+			klog.Infof("%s: releasing dynamically allocated dedicated host %s", r.machine.Name, allocatedHostID)
+			if err := releaseDedicatedHost(r.awsClient, allocatedHostID, r.machine.Name); err != nil {
+				klog.Errorf("%s: failed to release dedicated host %s: %v", r.machine.Name, allocatedHostID, err)
+				// Don't return error here - we still want to mark the machine as deleted
+				// The dedicated host will need to be cleaned up manually
+			}
 		}
 
 	}

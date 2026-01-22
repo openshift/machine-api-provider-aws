@@ -1827,7 +1827,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 			pc := stubProviderConfig()
 			tc.mutate(pc)
 
-			got, cerr := constructInstancePlacement(m, pc, fake.NewFakeClient())
+			got, cerr := constructInstancePlacement(m, pc, fake.NewFakeClient(), "")
 			if tc.wantErr {
 				g.Expect(cerr).To(gmg.HaveOccurred())
 				return

@@ -37,6 +37,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// AllocateHosts mocks base method.
+func (m *MockClient) AllocateHosts(arg0 *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AllocateHosts", arg0)
+	ret0, _ := ret[0].(*ec2.AllocateHostsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AllocateHosts indicates an expected call of AllocateHosts.
+func (mr *MockClientMockRecorder) AllocateHosts(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateHosts", reflect.TypeOf((*MockClient)(nil).AllocateHosts), arg0)
+}
+
 // CreatePlacementGroup mocks base method.
 func (m *MockClient) CreatePlacementGroup(arg0 *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
 	m.ctrl.T.Helper()
@@ -110,6 +125,21 @@ func (m *MockClient) DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*
 func (mr *MockClientMockRecorder) DescribeDHCPOptions(input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDHCPOptions", reflect.TypeOf((*MockClient)(nil).DescribeDHCPOptions), input)
+}
+
+// DescribeHosts mocks base method.
+func (m *MockClient) DescribeHosts(arg0 *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeHosts", arg0)
+	ret0, _ := ret[0].(*ec2.DescribeHostsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeHosts indicates an expected call of DescribeHosts.
+func (mr *MockClientMockRecorder) DescribeHosts(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeHosts", reflect.TypeOf((*MockClient)(nil).DescribeHosts), arg0)
 }
 
 // DescribeImages mocks base method.
@@ -320,6 +350,21 @@ func (m *MockClient) RegisterInstancesWithLoadBalancer(arg0 *elb.RegisterInstanc
 func (mr *MockClientMockRecorder) RegisterInstancesWithLoadBalancer(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterInstancesWithLoadBalancer", reflect.TypeOf((*MockClient)(nil).RegisterInstancesWithLoadBalancer), arg0)
+}
+
+// ReleaseHosts mocks base method.
+func (m *MockClient) ReleaseHosts(arg0 *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseHosts", arg0)
+	ret0, _ := ret[0].(*ec2.ReleaseHostsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReleaseHosts indicates an expected call of ReleaseHosts.
+func (mr *MockClientMockRecorder) ReleaseHosts(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseHosts", reflect.TypeOf((*MockClient)(nil).ReleaseHosts), arg0)
 }
 
 // RunInstances mocks base method.

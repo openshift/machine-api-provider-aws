@@ -142,18 +142,25 @@ func getDynamicHostTags(placement *machinev1beta1.Placement) map[string]string {
 	return placement.Host.DedicatedHost.DynamicHostAllocation.Tags
 }
 
-// getDynamicallyAllocatedHostID returns the host ID from the instance if it was dynamically allocated.
-// It checks the machineProviderConfig to see if dynamic allocation was configured, and if so, returns the host ID from the instance.
-func getDynamicallyAllocatedHostID(instance *ec2.Instance, machineProviderConfig *machinev1beta1.AWSMachineProviderConfig) string {
-	// Check if dynamic allocation is configured
-	if !shouldAllocateDedicatedHost(&machineProviderConfig.Placement) {
+// getAllocatedHostIDFromStatus returns the dynamically allocated host ID from the provider status.
+func getAllocatedHostIDFromStatus(providerStatus *machinev1beta1.AWSMachineProviderStatus) string {
+	if providerStatus == nil || providerStatus.DedicatedHost == nil || providerStatus.DedicatedHost.ID == nil {
 		return ""
 	}
+	return *providerStatus.DedicatedHost.ID
+}
 
-	// Get the host ID from the instance placement
-	if instance == nil || instance.Placement == nil || instance.Placement.HostId == nil {
-		return ""
+// setAllocatedHostIDInStatus sets the dynamically allocated host ID in the provider status.
+func setAllocatedHostIDInStatus(providerStatus *machinev1beta1.AWSMachineProviderStatus, hostID string) {
+	if providerStatus.DedicatedHost == nil {
+		providerStatus.DedicatedHost = &machinev1beta1.DedicatedHostStatus{}
 	}
+	providerStatus.DedicatedHost.ID = &hostID
+}
 
-	return aws.StringValue(instance.Placement.HostId)
+// clearAllocatedHostIDInStatus clears the dynamically allocated host ID from the provider status.
+func clearAllocatedHostIDInStatus(providerStatus *machinev1beta1.AWSMachineProviderStatus) {
+	if providerStatus.DedicatedHost != nil {
+		providerStatus.DedicatedHost.ID = nil
+	}
 }

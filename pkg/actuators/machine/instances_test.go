@@ -1194,7 +1194,7 @@ func TestLaunchInstance(t *testing.T) {
 
 			fakeClient := fake.NewFakeClient(tc.objects...)
 
-			_, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
+			_, _, launchErr := launchInstance(machine, tc.providerConfig, nil, mockAWSClient, fakeClient, tc.infra)
 			t.Log(launchErr)
 			if launchErr == nil {
 				if !tc.succeeds {

@@ -262,90 +262,79 @@ func TestReleaseDedicatedHost(t *testing.T) {
 	}
 }
 
-func TestGetDynamicallyAllocatedHostID(t *testing.T) {
+func TestGetAllocatedHostIDFromStatus(t *testing.T) {
 	tests := []struct {
-		name                  string
-		instance              *ec2.Instance
-		machineProviderConfig *machinev1beta1.AWSMachineProviderConfig
-		expected              string
+		name           string
+		providerStatus *machinev1beta1.AWSMachineProviderStatus
+		expected       string
 	}{
 		{
-			name:     "nil instance",
-			instance: nil,
-			machineProviderConfig: &machinev1beta1.AWSMachineProviderConfig{
-				Placement: machinev1beta1.Placement{
-					Host: &machinev1beta1.HostPlacement{
-						DedicatedHost: &machinev1beta1.DedicatedHost{
-							AllocationStrategy: ptr.To(AllocationStrategyDynamic),
-						},
-					},
-				},
+			name:           "nil provider status",
+			providerStatus: nil,
+			expected:       "",
+		},
+		{
+			name:           "nil dedicated host status",
+			providerStatus: &machinev1beta1.AWSMachineProviderStatus{},
+			expected:       "",
+		},
+		{
+			name: "nil host ID",
+			providerStatus: &machinev1beta1.AWSMachineProviderStatus{
+				DedicatedHost: &machinev1beta1.DedicatedHostStatus{},
 			},
 			expected: "",
 		},
 		{
-			name: "instance without placement",
-			instance: &ec2.Instance{
-				InstanceId: aws.String("i-1234567890abcdef0"),
-			},
-			machineProviderConfig: &machinev1beta1.AWSMachineProviderConfig{
-				Placement: machinev1beta1.Placement{
-					Host: &machinev1beta1.HostPlacement{
-						DedicatedHost: &machinev1beta1.DedicatedHost{
-							AllocationStrategy: ptr.To(AllocationStrategyDynamic),
-						},
-					},
-				},
-			},
-			expected: "",
-		},
-		{
-			name: "instance with host ID and dynamic allocation",
-			instance: &ec2.Instance{
-				InstanceId: aws.String("i-1234567890abcdef0"),
-				Placement: &ec2.Placement{
-					HostId: aws.String("h-1234567890abcdef0"),
-				},
-			},
-			machineProviderConfig: &machinev1beta1.AWSMachineProviderConfig{
-				Placement: machinev1beta1.Placement{
-					Host: &machinev1beta1.HostPlacement{
-						DedicatedHost: &machinev1beta1.DedicatedHost{
-							AllocationStrategy: ptr.To(AllocationStrategyDynamic),
-						},
-					},
+			name: "with host ID",
+			providerStatus: &machinev1beta1.AWSMachineProviderStatus{
+				DedicatedHost: &machinev1beta1.DedicatedHostStatus{
+					ID: ptr.To("h-1234567890abcdef0"),
 				},
 			},
 			expected: "h-1234567890abcdef0",
-		},
-		{
-			name: "instance with host ID but user provided allocation",
-			instance: &ec2.Instance{
-				InstanceId: aws.String("i-1234567890abcdef0"),
-				Placement: &ec2.Placement{
-					HostId: aws.String("h-1234567890abcdef0"),
-				},
-			},
-			machineProviderConfig: &machinev1beta1.AWSMachineProviderConfig{
-				Placement: machinev1beta1.Placement{
-					Host: &machinev1beta1.HostPlacement{
-						DedicatedHost: &machinev1beta1.DedicatedHost{
-							AllocationStrategy: ptr.To(AllocationStrategyUserProvided),
-							ID:                 "h-1234567890abcdef0",
-						},
-					},
-				},
-			},
-			expected: "",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := getDynamicallyAllocatedHostID(tc.instance, tc.machineProviderConfig)
+			result := getAllocatedHostIDFromStatus(tc.providerStatus)
 			if result != tc.expected {
 				t.Errorf("expected %q, got %q", tc.expected, result)
 			}
 		})
+	}
+}
+
+func TestSetAllocatedHostIDInStatus(t *testing.T) {
+	hostID := "h-1234567890abcdef0"
+
+	providerStatus := &machinev1beta1.AWSMachineProviderStatus{}
+	setAllocatedHostIDInStatus(providerStatus, hostID)
+
+	if providerStatus.DedicatedHost == nil {
+		t.Error("DedicatedHost should not be nil")
+		return
+	}
+	if providerStatus.DedicatedHost.ID == nil {
+		t.Error("DedicatedHost.ID should not be nil")
+		return
+	}
+	if *providerStatus.DedicatedHost.ID != hostID {
+		t.Errorf("expected host ID %q, got %q", hostID, *providerStatus.DedicatedHost.ID)
+	}
+}
+
+func TestClearAllocatedHostIDInStatus(t *testing.T) {
+	providerStatus := &machinev1beta1.AWSMachineProviderStatus{
+		DedicatedHost: &machinev1beta1.DedicatedHostStatus{
+			ID: ptr.To("h-1234567890abcdef0"),
+		},
+	}
+
+	clearAllocatedHostIDInStatus(providerStatus)
+
+	if providerStatus.DedicatedHost.ID != nil {
+		t.Errorf("expected host ID to be nil, got %q", *providerStatus.DedicatedHost.ID)
 	}
 }

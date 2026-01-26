@@ -19,7 +19,7 @@ const (
 
 // allocateDedicatedHost allocates a new dedicated host for the given instance type in the specified availability zone.
 // It applies any tags specified in the DynamicHostAllocation configuration.
-func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZone string, tags map[string]string, machineName string) (string, error) {
+func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZone string, tags []*ec2.Tag, machineName string) (string, error) {
 	klog.Infof("Allocating dedicated host for instance type %s in availability zone %s for machine %s", instanceType, availabilityZone, machineName)
 
 	allocateInput := &ec2.AllocateHostsInput{
@@ -32,16 +32,9 @@ func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZo
 	// Add tags if provided
 	if len(tags) > 0 {
 		var tagSpecs []*ec2.TagSpecification
-		ec2Tags := make([]*ec2.Tag, 0, len(tags))
-		for k, v := range tags {
-			ec2Tags = append(ec2Tags, &ec2.Tag{
-				Key:   aws.String(k),
-				Value: aws.String(v),
-			})
-		}
 		tagSpecs = append(tagSpecs, &ec2.TagSpecification{
 			ResourceType: aws.String("dedicated-host"),
-			Tags:         ec2Tags,
+			Tags:         tags,
 		})
 		allocateInput.TagSpecifications = tagSpecs
 	}
@@ -85,24 +78,6 @@ func releaseDedicatedHost(client awsclient.Client, hostID, machineName string) e
 	return nil
 }
 
-// describeDedicatedHost retrieves information about a dedicated host.
-func describeDedicatedHost(client awsclient.Client, hostID string) (*ec2.Host, error) {
-	describeInput := &ec2.DescribeHostsInput{
-		HostIds: []*string{aws.String(hostID)},
-	}
-
-	output, err := client.DescribeHosts(describeInput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to describe dedicated host %s: %w", hostID, err)
-	}
-
-	if len(output.Hosts) == 0 {
-		return nil, fmt.Errorf("dedicated host %s not found", hostID)
-	}
-
-	return output.Hosts[0], nil
-}
-
 // shouldAllocateDedicatedHost checks if a dedicated host should be allocated based on the placement configuration.
 func shouldAllocateDedicatedHost(placement *machinev1beta1.Placement) bool {
 	if placement == nil || placement.Host == nil || placement.Host.DedicatedHost == nil {
@@ -133,7 +108,7 @@ func getDedicatedHostID(placement *machinev1beta1.Placement) string {
 }
 
 // getDynamicHostTags returns the tags to apply to a dynamically allocated dedicated host.
-func getDynamicHostTags(placement *machinev1beta1.Placement) map[string]string {
+func getDynamicHostTags(placement *machinev1beta1.Placement) []machinev1beta1.TagSpecification {
 	if placement == nil || placement.Host == nil || placement.Host.DedicatedHost == nil ||
 		placement.Host.DedicatedHost.DynamicHostAllocation == nil {
 		return nil

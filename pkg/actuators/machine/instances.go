@@ -460,7 +460,10 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 			return nil, "", mapierrors.InvalidMachineConfiguration("availability zone is required for dedicated host allocation")
 		}
 
-		tags := getDynamicHostTags(&machineProviderConfig.Placement)
+		// Get user-provided tags and required tags, then merge them
+		userTags := getDynamicHostTags(&machineProviderConfig.Placement)
+		tags := buildTagList(machine.Name, clusterID, userTags, infra)
+
 		hostID, err := allocateDedicatedHost(awsClient, machineProviderConfig.InstanceType, availabilityZone, tags, machine.Name)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to allocate dedicated host: %w", err)

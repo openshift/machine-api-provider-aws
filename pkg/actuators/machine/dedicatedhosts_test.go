@@ -139,7 +139,7 @@ func TestGetDynamicHostTags(t *testing.T) {
 	tests := []struct {
 		name      string
 		placement *machinev1beta1.Placement
-		expected  map[string]string
+		expected  []machinev1beta1.TagSpecification
 	}{
 		{
 			name:      "nil placement",
@@ -161,17 +161,17 @@ func TestGetDynamicHostTags(t *testing.T) {
 				Host: &machinev1beta1.HostPlacement{
 					DedicatedHost: &machinev1beta1.DedicatedHost{
 						DynamicHostAllocation: &machinev1beta1.DynamicHostAllocationSpec{
-							Tags: map[string]string{
-								"key1": "value1",
-								"key2": "value2",
+							Tags: []machinev1beta1.TagSpecification{
+								{Name: "key1", Value: "value1"},
+								{Name: "key2", Value: "value2"},
 							},
 						},
 					},
 				},
 			},
-			expected: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
+			expected: []machinev1beta1.TagSpecification{
+				{Name: "key1", Value: "value1"},
+				{Name: "key2", Value: "value2"},
 			},
 		},
 	}
@@ -183,9 +183,9 @@ func TestGetDynamicHostTags(t *testing.T) {
 				t.Errorf("expected %d tags, got %d", len(tc.expected), len(result))
 				return
 			}
-			for k, v := range tc.expected {
-				if result[k] != v {
-					t.Errorf("expected tag %s=%s, got %s=%s", k, v, k, result[k])
+			for i, expectedTag := range tc.expected {
+				if result[i].Name != expectedTag.Name || result[i].Value != expectedTag.Value {
+					t.Errorf("expected tag %s=%s, got %s=%s", expectedTag.Name, expectedTag.Value, result[i].Name, result[i].Value)
 				}
 			}
 		})
@@ -200,8 +200,9 @@ func TestAllocateDedicatedHost(t *testing.T) {
 
 	instanceType := "m5.large"
 	availabilityZone := "us-east-1a"
-	tags := map[string]string{
-		"test-key": "test-value",
+	tags := []*ec2.Tag{
+		{Key: aws.String("test-key"), Value: aws.String("test-value")},
+		{Key: aws.String("openshiftClusterID"), Value: aws.String("test-cluster")},
 	}
 	machineName := "test-machine"
 
@@ -219,6 +220,13 @@ func TestAllocateDedicatedHost(t *testing.T) {
 		}
 		if *input.AutoPlacement != "off" {
 			t.Errorf("expected auto placement off, got %s", *input.AutoPlacement)
+		}
+
+		// Verify tags were passed correctly
+		if len(input.TagSpecifications) > 0 {
+			if len(input.TagSpecifications[0].Tags) != len(tags) {
+				t.Errorf("expected %d tags, got %d", len(tags), len(input.TagSpecifications[0].Tags))
+			}
 		}
 
 		return &ec2.AllocateHostsOutput{

@@ -119,4 +119,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/openshift/api => github.com/vr4manta/api v0.0.0-20260121193235-9cb2318ff960
+replace github.com/openshift/api => github.com/vr4manta/api v0.0.0-20260126150647-31e7152a2e04

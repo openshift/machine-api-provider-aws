@@ -539,7 +539,7 @@ type DedicatedHost struct {
 type DynamicHostAllocationSpec struct {
 	// tags specifies a set of key-value pairs to apply to the allocated dedicated host.
 	// When omitted, no additional user-defined tags will be applied to the allocated host.
-	// +kubebuilder:validation:MinProperties=1
+	// +kubebuilder:validation:MinItems=1
 	// +optional
-	Tags map[string]string `json:"tags,omitempty"`
+	Tags []TagSpecification `json:"tags,omitempty"`
 }

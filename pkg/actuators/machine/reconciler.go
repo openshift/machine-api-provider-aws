@@ -97,7 +97,7 @@ func (r *Reconciler) create() error {
 		return err
 	}
 
-	instance, err := launchInstance(r.machine, r.providerSpec, userData, r.awsClient, r.client, infra)
+	instance, allocatedHostID, err := launchInstance(r.machine, r.providerSpec, userData, r.awsClient, r.client, infra)
 	if err != nil {
 		klog.Errorf("%s: error creating machine: %v", r.machine.Name, err)
 		conditionFailed := conditionFailed()
@@ -117,6 +117,13 @@ func (r *Reconciler) create() error {
 
 	klog.Infof("Created Machine %v", r.machine.Name)
 	r.machineScope.setProviderStatus(instance, conditionSuccess())
+
+	// Set the allocated dedicated host ID in the provider status if one was allocated
+	if allocatedHostID != "" {
+		setAllocatedHostIDInStatus(r.providerStatus, allocatedHostID)
+		klog.Infof("%s: set allocated dedicated host ID %s in provider status", r.machine.Name, allocatedHostID)
+	}
+
 	// DO NOT set addresses on the first pass.
 	// If we set addresses, the machine controller implies that the machine is provisioned.
 	// We remove them here so that we get a chance to requeue when there is a delay in the
@@ -184,6 +191,22 @@ func (r *Reconciler) delete() error {
 			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(terminatingInstances[0].CurrentState.Name)
 		}
 	} else if isTerminated {
+		// Check if we need to release a dynamically allocated dedicated host since the instance is now terminated (which removes it from host)
+		allocatedHostID := getAllocatedHostIDFromStatus(r.providerStatus)
+
+		// Release dynamically allocated dedicated host if present
+		if allocatedHostID != "" {
+			klog.Infof("%s: releasing dynamically allocated dedicated host %s", r.machine.Name, allocatedHostID)
+			if err := releaseDedicatedHost(r.awsClient, allocatedHostID, r.machine.Name); err != nil {
+				klog.Errorf("%s: failed to release dedicated host %s: %v", r.machine.Name, allocatedHostID, err)
+				// Don't return error here - we still want to mark the machine as deleted
+				// The dedicated host will need to be cleaned up manually
+			} else {
+				// Successfully released the host, clear it from the status
+				clearAllocatedHostIDInStatus(r.providerStatus)
+			}
+		}
+
 		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = ec2.InstanceStateNameTerminated
 	}
 

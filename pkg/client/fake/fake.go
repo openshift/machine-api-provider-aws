@@ -222,6 +222,23 @@ func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput)
 	}, nil
 }
 
+func (c *awsClient) DescribeHosts(input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
+	return &ec2.DescribeHostsOutput{}, nil
+}
+
+func (c *awsClient) AllocateHosts(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+	return &ec2.AllocateHostsOutput{
+		HostIds: []*string{aws.String("h-0123456789abcdef0")},
+	}, nil
+}
+
+func (c *awsClient) ReleaseHosts(input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+	return &ec2.ReleaseHostsOutput{
+		Successful:   input.HostIds,
+		Unsuccessful: []*ec2.UnsuccessfulItem{},
+	}, nil
+}
+
 func (c *awsClient) TerminateInstances(input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
 	// Feel free to extend the returned values
 	return &ec2.TerminateInstancesOutput{}, nil

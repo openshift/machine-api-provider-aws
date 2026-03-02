@@ -5,9 +5,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"go.uber.org/mock/gomock"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/machine-api-provider-aws/pkg/client/mock"
+	"go.uber.org/mock/gomock"
 	"k8s.io/utils/ptr"
 )
 

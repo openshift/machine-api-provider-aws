@@ -528,7 +528,8 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		NetworkInterfaces:                networkInterfaces,
 		UserData:                         &userDataEnc,
 		Placement:                        placement,
-		MetadataOptions:                  getInstanceMetadataOptionsRequest(machineProviderConfig),
+		MetadataOptions:                  getInstanceMetadataOptionsRequest(machineProviderConfig, infra),
+		PrivateDnsNameOptions:            getPrivateDNSNameOptionsRequest(infra),
 		InstanceMarketOptions:            instanceMarketOptions,
 		CapacityReservationSpecification: capacityReservationSpecification,
 		CpuOptions:                       getCPUOptionsRequest(machineProviderConfig),
@@ -784,7 +785,17 @@ func constructInstancePlacement(machine *machinev1beta1.Machine, machineProvider
 	return placement, nil
 }
 
-func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig) *ec2.InstanceMetadataOptionsRequest {
+// isAWSDualStack checks if the infrastructure is configured for dual-stack networking.
+// It returns true if infra ipFamily is configured with either DualStackIPv6Primary or DualStackIPv4Primary.
+func isAWSDualStack(infra *configv1.Infrastructure) bool {
+	if infra == nil || infra.Status.PlatformStatus == nil || infra.Status.PlatformStatus.AWS == nil {
+		return false
+	}
+	return infra.Status.PlatformStatus.AWS.IPFamily == configv1.DualStackIPv6Primary ||
+		infra.Status.PlatformStatus.AWS.IPFamily == configv1.DualStackIPv4Primary
+}
+
+func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig, infra *configv1.Infrastructure) *ec2.InstanceMetadataOptionsRequest {
 	imdsOptions := &ec2.InstanceMetadataOptionsRequest{}
 
 	switch providerConfig.MetadataServiceOptions.Authentication {
@@ -797,11 +808,33 @@ func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachine
 		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateRequired)
 	}
 
+	if isAWSDualStack(infra) {
+		imdsOptions.HttpProtocolIpv6 = ptr.To("enabled")
+	}
+
 	if *imdsOptions == (ec2.InstanceMetadataOptionsRequest{}) {
 		// return nil instead of empty struct if there is no options set
 		return nil
 	}
 	return imdsOptions
+}
+
+func getPrivateDNSNameOptionsRequest(infra *configv1.Infrastructure) *ec2.PrivateDnsNameOptionsRequest {
+	privateDNSNameOptions := &ec2.PrivateDnsNameOptionsRequest{}
+
+	if isAWSDualStack(infra) {
+		privateDNSNameOptions.EnableResourceNameDnsARecord = ptr.To(true)
+		privateDNSNameOptions.EnableResourceNameDnsAAAARecord = ptr.To(true)
+		// Only resource-name supports A and AAAA records for private host names
+		// See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/hostname-types.html#ec2-instance-private-hostnames
+		privateDNSNameOptions.HostnameType = ptr.To(string(ec2.HostnameTypeResourceName))
+	}
+
+	if *privateDNSNameOptions == (ec2.PrivateDnsNameOptionsRequest{}) {
+		// return nil instead of empty struct if there is no options set
+		return nil
+	}
+	return privateDNSNameOptions
 }
 
 func getCapacityReservationSpecification(capacityReservationID string) (*ec2.CapacityReservationSpecification, error) {

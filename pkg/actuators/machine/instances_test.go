@@ -1180,6 +1180,110 @@ func TestLaunchInstance(t *testing.T) {
 				UserData: aws.String(""),
 			},
 		},
+		{
+			name:            "DualStackIPv6Primary with private DNS name and IMDS options",
+			providerConfig:  providerConfig,
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			succeeds:        true,
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv6Primary,
+						},
+					},
+				},
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups:                   stubSecurityGroupsDefault,
+						PrimaryIpv6:              aws.Bool(true),
+						Ipv6AddressCount:         aws.Int64(1),
+					},
+				},
+				UserData: aws.String(""),
+				MetadataOptions: &ec2.InstanceMetadataOptionsRequest{
+					HttpProtocolIpv6: aws.String("enabled"),
+				},
+				PrivateDnsNameOptions: &ec2.PrivateDnsNameOptionsRequest{
+					EnableResourceNameDnsARecord:    aws.Bool(true),
+					EnableResourceNameDnsAAAARecord: aws.Bool(true),
+					HostnameType:                    aws.String("resource-name"),
+				},
+			},
+		},
+		{
+			name:            "DualStackIPv4Primary with private DNS name and IMDS options",
+			providerConfig:  providerConfig,
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
+			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
+			succeeds:        true,
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv4Primary,
+						},
+					},
+				},
+			},
+			runInstancesInput: &ec2.RunInstancesInput{
+				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
+				},
+				ImageId:      aws.String(*providerConfig.AMI.ID),
+				InstanceType: &providerConfig.InstanceType,
+				MinCount:     aws.Int64(1),
+				MaxCount:     aws.Int64(1),
+				KeyName:      providerConfig.KeyName,
+				TagSpecifications: []*ec2.TagSpecification{{
+					ResourceType: aws.String("instance"),
+					Tags:         stubTagList,
+				}, {
+					ResourceType: aws.String("volume"),
+					Tags:         stubTagList,
+				}},
+				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+					{
+						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						AssociatePublicIpAddress: providerConfig.PublicIP,
+						SubnetId:                 providerConfig.Subnet.ID,
+						Groups:                   stubSecurityGroupsDefault,
+					},
+				},
+				UserData: aws.String(""),
+				MetadataOptions: &ec2.InstanceMetadataOptionsRequest{
+					HttpProtocolIpv6: aws.String("enabled"),
+				},
+				PrivateDnsNameOptions: &ec2.PrivateDnsNameOptionsRequest{
+					EnableResourceNameDnsARecord:    aws.Bool(true),
+					EnableResourceNameDnsAAAARecord: aws.Bool(true),
+					HostnameType:                    aws.String("resource-name"),
+				},
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1377,11 +1481,13 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 	testCases := []struct {
 		name           string
 		providerConfig *machinev1beta1.AWSMachineProviderConfig
+		infra          *configv1.Infrastructure
 		expected       *ec2.InstanceMetadataOptionsRequest
 	}{
 		{
 			name:           "no imds options specified",
 			providerConfig: &machinev1beta1.AWSMachineProviderConfig{},
+			infra:          nil,
 			expected:       nil,
 		},
 		{
@@ -1391,6 +1497,7 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 					Authentication: machinev1beta1.MetadataServiceAuthenticationRequired,
 				},
 			},
+			infra: nil,
 			expected: &ec2.InstanceMetadataOptionsRequest{
 				HttpTokens: aws.String(ec2.HttpTokensStateRequired),
 			},
@@ -1402,6 +1509,7 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 					Authentication: machinev1beta1.MetadataServiceAuthenticationOptional,
 				},
 			},
+			infra: nil,
 			expected: &ec2.InstanceMetadataOptionsRequest{
 				HttpTokens: aws.String(ec2.HttpTokensStateOptional),
 			},
@@ -1414,13 +1522,142 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 					Authentication: "foooobaaaar",
 				},
 			},
+			infra:    nil,
+			expected: nil,
+		},
+		{
+			name:           "DualStackIPv6Primary IPFamily",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{},
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv6Primary,
+						},
+					},
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpProtocolIpv6: aws.String("enabled"),
+			},
+		},
+		{
+			name:           "DualStackIPv4Primary IPFamily",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{},
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv4Primary,
+						},
+					},
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpProtocolIpv6: aws.String("enabled"),
+			},
+		},
+		{
+			name:           "IPv4 IPFamily",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{},
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.IPv4,
+						},
+					},
+				},
+			},
 			expected: nil,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			g := gmg.NewWithT(t)
-			req := getInstanceMetadataOptionsRequest(tc.providerConfig)
+			req := getInstanceMetadataOptionsRequest(tc.providerConfig, tc.infra)
+			g.Expect(req).To(gmg.BeEquivalentTo(tc.expected))
+		})
+	}
+}
+
+func TestGetPrivateDNSNameOptionsRequest(t *testing.T) {
+	testCases := []struct {
+		name     string
+		infra    *configv1.Infrastructure
+		expected *ec2.PrivateDnsNameOptionsRequest
+	}{
+		{
+			name:     "no infra specified",
+			infra:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty infra",
+			infra:    &configv1.Infrastructure{},
+			expected: nil,
+		},
+		{
+			name: "infra with no AWS platform status",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "DualStackIPv6Primary IPFamily",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv6Primary,
+						},
+					},
+				},
+			},
+			expected: &ec2.PrivateDnsNameOptionsRequest{
+				EnableResourceNameDnsARecord:    aws.Bool(true),
+				EnableResourceNameDnsAAAARecord: aws.Bool(true),
+				HostnameType:                    aws.String(ec2.HostnameTypeResourceName),
+			},
+		},
+		{
+			name: "DualStackIPv4Primary IPFamily",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv4Primary,
+						},
+					},
+				},
+			},
+			expected: &ec2.PrivateDnsNameOptionsRequest{
+				EnableResourceNameDnsARecord:    aws.Bool(true),
+				EnableResourceNameDnsAAAARecord: aws.Bool(true),
+				HostnameType:                    aws.String(ec2.HostnameTypeResourceName),
+			},
+		},
+		{
+			name: "IPv4 IPFamily",
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.IPv4,
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := gmg.NewWithT(t)
+			req := getPrivateDNSNameOptionsRequest(tc.infra)
 			g.Expect(req).To(gmg.BeEquivalentTo(tc.expected))
 		})
 	}

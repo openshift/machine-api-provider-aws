@@ -841,6 +841,14 @@ func getCPUOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfi
 		}
 	}
 
+	if providerConfig.CPUOptions.CoreCount != nil {
+		cpuOptions.CoreCount = providerConfig.CPUOptions.CoreCount
+	}
+
+	if providerConfig.CPUOptions.ThreadsPerCore != nil {
+		cpuOptions.ThreadsPerCore = providerConfig.CPUOptions.ThreadsPerCore
+	}
+
 	if *cpuOptions == (ec2.CpuOptionsRequest{}) {
 		return nil
 	}

@@ -379,6 +379,16 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		},
 	}
 
+	// For dual-stack IPv6-primary clusters, instances must have a primary IPv6 address on their primary ENI
+	// to register with the IPv6 Target Groups of API and Ingress load balancers.
+	// See: https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-target-groups.html#target-group-ip-address-type
+	if infra != nil && infra.Status.PlatformStatus != nil && infra.Status.PlatformStatus.AWS != nil && infra.Status.PlatformStatus.AWS.IPFamily == configv1.DualStackIPv6Primary {
+		networkInterfaces[0].PrimaryIpv6 = aws.Bool(true)
+		// The subnet should automatically assign 1 IPv6 address from its IPv6 CIDR to the instance,
+		// but we need to redundantly request 1 here as AWS API requires so. Otherwise, we will run into InvalidParameterValue API error.
+		networkInterfaces[0].Ipv6AddressCount = aws.Int64(1)
+	}
+
 	// Public IP address assignment to instances created in Wavelength
 	// Zones' subnet requires the attribute AssociateCarrierIpAddress
 	// instead of AssociatePublicIpAddress.

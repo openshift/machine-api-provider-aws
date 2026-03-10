@@ -20,8 +20,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	openshiftfeatures "github.com/openshift/api/features"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/library-go/pkg/features"
+	"github.com/openshift/machine-api-provider-aws/pkg/version"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apiserver/pkg/util/feature"
 	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +47,14 @@ func TestReconciler(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	// Initialize feature gate, otherwise tests fail to run because a version is not set
+	major := version.Version.Major
+	if major == 0 {
+		major = 4
+	}
+	_, gateErr := features.NewFeatureGateOptions(feature.DefaultMutableFeatureGate, major, openshiftfeatures.SelfManaged, openshiftfeatures.FeatureGateMachineAPIMigration)
+	Expect(gateErr).ToNot(HaveOccurred())
+
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "vendor", "github.com", "openshift", "api", "machine", "v1beta1")},
 	}

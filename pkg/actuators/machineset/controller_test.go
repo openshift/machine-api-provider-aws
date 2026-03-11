@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -414,11 +414,11 @@ func TestNormalizeArchitecture(t *testing.T) {
 		expected     normalizedArch
 	}{
 		{
-			architecture: ec2.ArchitectureTypeX8664,
+			architecture: string(ec2types.ArchitectureTypeX8664),
 			expected:     ArchitectureAmd64,
 		},
 		{
-			architecture: ec2.ArchitectureTypeArm64,
+			architecture: string(ec2types.ArchitectureTypeArm64),
 			expected:     ArchitectureArm64,
 		},
 		{

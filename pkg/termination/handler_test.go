@@ -185,7 +185,7 @@ var _ = Describe("Handler Suite", func() {
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError("error polling termination endpoint: EC2MetadataError: failed to make EC2Metadata request\n\n\tstatus code: 500, request id: ")))
+					Eventually(errs).Should(Receive(MatchError(ContainSubstring("StatusCode: 500"))))
 				})
 
 				It("should not delete the machine", func() {
@@ -202,7 +202,7 @@ var _ = Describe("Handler Suite", func() {
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError(ContainSubstring("RequestError: send request failed\ncaused by: Get \"/latest/meta-data/spot/termination-time#1://localhost\": unsupported protocol scheme \"\""))))
+					Eventually(errs).Should(Receive(MatchError(ContainSubstring("unsupported protocol scheme"))))
 				})
 
 				It("should not delete the machine", func() {
@@ -318,6 +318,14 @@ type mockHTTPHandler struct {
 
 // ServeHTTP implements the http.Handler interface
 func (m *mockHTTPHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	// Handle IMDSv2 token requests transparently so that the v2 IMDS client
+	// can acquire a token before making metadata GET requests.
+	if req.Method == http.MethodPut && req.URL.Path == "/latest/api/token" {
+		rw.Header().Set("Content-Type", "text/plain")
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte("mock-imds-token"))
+		return
+	}
 	m.handleFunc(rw, req)
 }
 

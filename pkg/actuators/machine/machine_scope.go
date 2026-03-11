@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machineapierros "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
@@ -163,7 +165,7 @@ func (s *machineScope) getUserData() ([]byte, error) {
 	return userData, nil
 }
 
-func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition metav1.Condition) error {
+func (s *machineScope) setProviderStatus(instance *ec2types.Instance, condition metav1.Condition) error {
 	klog.Infof("%s: Updating status", s.machine.Name)
 
 	networkAddresses := []corev1.NodeAddress{}
@@ -175,7 +177,8 @@ func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition metav
 		s.providerStatus.InstanceState = nil
 	} else {
 		s.providerStatus.InstanceID = instance.InstanceId
-		s.providerStatus.InstanceState = instance.State.Name
+		state := string(instance.State.Name)
+		s.providerStatus.InstanceState = &state
 
 		domainNames, err := s.getCustomDomainFromDHCP(instance.VpcId)
 		if err != nil {
@@ -199,32 +202,36 @@ func (s *machineScope) setProviderStatus(instance *ec2.Instance, condition metav
 }
 
 func (s *machineScope) getCustomDomainFromDHCP(vpcID *string) ([]string, error) {
-	vpc, err := s.awsClient.DescribeVpcs(&ec2.DescribeVpcsInput{
-		VpcIds: []*string{vpcID},
+	if vpcID == nil {
+		return nil, nil
+	}
+
+	vpc, err := s.awsClient.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{
+		VpcIds: []string{*vpcID},
 	})
 	if err != nil {
 		klog.Errorf("%s: error describing vpc: %v", s.machine.Name, err)
 		return nil, err
 	}
 
-	if len(vpc.Vpcs) == 0 || vpc.Vpcs[0] == nil || vpc.Vpcs[0].DhcpOptionsId == nil {
+	if len(vpc.Vpcs) == 0 || vpc.Vpcs[0].DhcpOptionsId == nil {
 		return nil, nil
 	}
 
-	dhcp, err := s.awsClient.DescribeDHCPOptions(&ec2.DescribeDhcpOptionsInput{
-		DhcpOptionsIds: []*string{vpc.Vpcs[0].DhcpOptionsId},
+	dhcp, err := s.awsClient.DescribeDHCPOptions(context.TODO(), &ec2.DescribeDhcpOptionsInput{
+		DhcpOptionsIds: []string{aws.ToString(vpc.Vpcs[0].DhcpOptionsId)},
 	})
 	if err != nil {
 		klog.Errorf("%s: error describing dhcp: %v", s.machine.Name, err)
 		return nil, err
 	}
 
-	if dhcp == nil || len(dhcp.DhcpOptions) == 0 || dhcp.DhcpOptions[0] == nil {
+	if dhcp == nil || len(dhcp.DhcpOptions) == 0 {
 		return nil, nil
 	}
 
 	for _, i := range dhcp.DhcpOptions[0].DhcpConfigurations {
-		if i.Key != nil && *i.Key == dhcpDomainKeyName && len(i.Values) > 0 && i.Values[0] != nil && i.Values[0].Value != nil {
+		if i.Key != nil && *i.Key == dhcpDomainKeyName && len(i.Values) > 0 && i.Values[0].Value != nil {
 			return strings.Split(*i.Values[0].Value, " "), nil
 		}
 	}

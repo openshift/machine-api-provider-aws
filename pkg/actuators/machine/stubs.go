@@ -5,9 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/elbv2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
@@ -34,12 +36,12 @@ const (
 	stubSubnetID    = "subnet-0e56b13a64ff8a941"
 )
 
-var stubSecurityGroupsDefault = []*string{
-	aws.String("sg-00868b02fbe29de17"),
-	aws.String("sg-0a4658991dc5eb40a"),
-	aws.String("sg-009a70e28fa4ba84e"),
-	aws.String("sg-07323d56fb932c84c"),
-	aws.String("sg-08b1ffd32874d59a2"),
+var stubSecurityGroupsDefault = []string{
+	"sg-00868b02fbe29de17",
+	"sg-0a4658991dc5eb40a",
+	"sg-009a70e28fa4ba84e",
+	"sg-07323d56fb932c84c",
+	"sg-08b1ffd32874d59a2",
 }
 
 const userDataBlob = `#cloud-config
@@ -61,8 +63,9 @@ type stubInput struct {
 
 func stubPCSecurityGroupsDefault() (groups []machinev1beta1.AWSResourceReference) {
 	for _, group := range stubSecurityGroupsDefault {
+		g := group
 		groups = append(groups, machinev1beta1.AWSResourceReference{
-			ID: group,
+			ID: &g,
 		})
 	}
 	return
@@ -186,37 +189,37 @@ func GenerateAwsCredentialsSecretFromEnv(secretName, namespace string) *corev1.S
 	}
 }
 
-func stubInstance(imageID, instanceID string, setIP bool) *ec2.Instance {
+func stubInstance(imageID, instanceID string, setIP bool) ec2types.Instance {
 	var ipAddr *string
 	if setIP {
 		ipAddr = aws.String("1.1.1.1")
 	}
-	return &ec2.Instance{
+	return ec2types.Instance{
 		ImageId:    aws.String(imageID),
 		InstanceId: aws.String(instanceID),
-		State: &ec2.InstanceState{
-			Name: aws.String(ec2.InstanceStateNameRunning),
-			Code: aws.Int64(16),
+		State: &ec2types.InstanceState{
+			Name: ec2types.InstanceStateNameRunning,
+			Code: aws.Int32(16),
 		},
 		LaunchTime:       aws.Time(time.Now()),
 		PublicDnsName:    aws.String("publicDNS"),
 		PrivateDnsName:   aws.String("privateDNS"),
 		PublicIpAddress:  ipAddr,
 		PrivateIpAddress: ipAddr,
-		Tags: []*ec2.Tag{
+		Tags: []ec2types.Tag{
 			{
 				Key:   aws.String("key"),
 				Value: aws.String("value"),
 			},
 		},
-		IamInstanceProfile: &ec2.IamInstanceProfile{
+		IamInstanceProfile: &ec2types.IamInstanceProfile{
 			Id: aws.String("profile"),
 		},
 		SubnetId: aws.String("subnetID"),
-		Placement: &ec2.Placement{
+		Placement: &ec2types.Placement{
 			AvailabilityZone: aws.String("us-east-1a"),
 		},
-		SecurityGroups: []*ec2.GroupIdentifier{
+		SecurityGroups: []ec2types.GroupIdentifier{
 			{
 				GroupName: aws.String("groupName"),
 			},
@@ -224,7 +227,7 @@ func stubInstance(imageID, instanceID string, setIP bool) *ec2.Instance {
 	}
 }
 
-func stubAvailabilityZone(zoneName, zoneType string) *ec2.AvailabilityZone {
+func stubAvailabilityZone(zoneName, zoneType string) ec2types.AvailabilityZone {
 	zName := defaultAvailabilityZone
 	if zoneName != "" {
 		zName = zoneName
@@ -233,7 +236,7 @@ func stubAvailabilityZone(zoneName, zoneType string) *ec2.AvailabilityZone {
 	if zoneType != "" {
 		zType = zoneType
 	}
-	return &ec2.AvailabilityZone{
+	return ec2types.AvailabilityZone{
 		ZoneName: aws.String(zName),
 		ZoneType: aws.String(zType),
 	}
@@ -241,7 +244,7 @@ func stubAvailabilityZone(zoneName, zoneType string) *ec2.AvailabilityZone {
 
 func stubDescribeAvailabilityZonesOutputDefault() *ec2.DescribeAvailabilityZonesOutput {
 	return &ec2.DescribeAvailabilityZonesOutput{
-		AvailabilityZones: []*ec2.AvailabilityZone{
+		AvailabilityZones: []ec2types.AvailabilityZone{
 			stubAvailabilityZone(defaultAvailabilityZone, defaultZoneType),
 		},
 	}
@@ -249,7 +252,7 @@ func stubDescribeAvailabilityZonesOutputDefault() *ec2.DescribeAvailabilityZones
 
 func stubDescribeAvailabilityZonesOutputWavelength() *ec2.DescribeAvailabilityZonesOutput {
 	return &ec2.DescribeAvailabilityZonesOutput{
-		AvailabilityZones: []*ec2.AvailabilityZone{
+		AvailabilityZones: []ec2types.AvailabilityZone{
 			stubAvailabilityZone(defaultWavelengthZone, zoneTypeWavelength),
 		},
 	}
@@ -257,13 +260,13 @@ func stubDescribeAvailabilityZonesOutputWavelength() *ec2.DescribeAvailabilityZo
 
 func stubDescribeAvailabilityZonesOutput() *ec2.DescribeAvailabilityZonesOutput {
 	return &ec2.DescribeAvailabilityZonesOutput{
-		AvailabilityZones: []*ec2.AvailabilityZone{
+		AvailabilityZones: []ec2types.AvailabilityZone{
 			stubAvailabilityZone("", ""),
 		},
 	}
 }
 
-func stubSubnet(subnetID, zoneName string) *ec2.Subnet {
+func stubSubnet(subnetID, zoneName string) ec2types.Subnet {
 	zName := defaultAvailabilityZone
 	if zoneName != "" {
 		zName = zoneName
@@ -272,7 +275,7 @@ func stubSubnet(subnetID, zoneName string) *ec2.Subnet {
 	if subnetID != "" {
 		sID = subnetID
 	}
-	return &ec2.Subnet{
+	return ec2types.Subnet{
 		SubnetId:         aws.String(sID),
 		AvailabilityZone: aws.String(zName),
 	}
@@ -280,7 +283,7 @@ func stubSubnet(subnetID, zoneName string) *ec2.Subnet {
 
 func stubDescribeSubnetsOutput() *ec2.DescribeSubnetsOutput {
 	return &ec2.DescribeSubnetsOutput{
-		Subnets: []*ec2.Subnet{
+		Subnets: []ec2types.Subnet{
 			stubSubnet("", ""),
 		},
 	}
@@ -288,7 +291,7 @@ func stubDescribeSubnetsOutput() *ec2.DescribeSubnetsOutput {
 
 func stubDescribeSubnetsOutputDefault() *ec2.DescribeSubnetsOutput {
 	return &ec2.DescribeSubnetsOutput{
-		Subnets: []*ec2.Subnet{
+		Subnets: []ec2types.Subnet{
 			stubSubnet("subnetID", defaultAvailabilityZone),
 		},
 	}
@@ -296,7 +299,7 @@ func stubDescribeSubnetsOutputDefault() *ec2.DescribeSubnetsOutput {
 
 func stubDescribeSubnetsOutputProvided(subnetID string) *ec2.DescribeSubnetsOutput {
 	return &ec2.DescribeSubnetsOutput{
-		Subnets: []*ec2.Subnet{
+		Subnets: []ec2types.Subnet{
 			stubSubnet(subnetID, defaultAvailabilityZone),
 		},
 	}
@@ -304,7 +307,7 @@ func stubDescribeSubnetsOutputProvided(subnetID string) *ec2.DescribeSubnetsOutp
 
 func stubDescribeSubnetsOutputWavelength() *ec2.DescribeSubnetsOutput {
 	return &ec2.DescribeSubnetsOutput{
-		Subnets: []*ec2.Subnet{
+		Subnets: []ec2types.Subnet{
 			stubSubnet(stubSubnetID, defaultWavelengthZone),
 		},
 	}
@@ -387,7 +390,7 @@ func stubInvalidInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 
 func stubDescribeLoadBalancersOutput() *elbv2.DescribeLoadBalancersOutput {
 	return &elbv2.DescribeLoadBalancersOutput{
-		LoadBalancers: []*elbv2.LoadBalancer{
+		LoadBalancers: []elbv2types.LoadBalancer{
 			{
 				LoadBalancerName: aws.String("lbname"),
 				LoadBalancerArn:  aws.String("lbarn"),
@@ -398,13 +401,13 @@ func stubDescribeLoadBalancersOutput() *elbv2.DescribeLoadBalancersOutput {
 
 func stubDescribeTargetGroupsOutput() *elbv2.DescribeTargetGroupsOutput {
 	return &elbv2.DescribeTargetGroupsOutput{
-		TargetGroups: []*elbv2.TargetGroup{
+		TargetGroups: []elbv2types.TargetGroup{
 			{
-				TargetType:     aws.String(elbv2.TargetTypeEnumInstance),
+				TargetType:     elbv2types.TargetTypeEnumInstance,
 				TargetGroupArn: aws.String("arn1"),
 			},
 			{
-				TargetType:     aws.String(elbv2.TargetTypeEnumIp),
+				TargetType:     elbv2types.TargetTypeEnumIp,
 				TargetGroupArn: aws.String("arn2"),
 			},
 		},
@@ -418,7 +421,7 @@ func stubDescribeTargetHealthOutput() *elbv2.DescribeTargetHealthOutput {
 func stubDeregisterTargetsInput(ipAddr string) *elbv2.DeregisterTargetsInput {
 	return &elbv2.DeregisterTargetsInput{
 		TargetGroupArn: aws.String("arn2"),
-		Targets: []*elbv2.TargetDescription{
+		Targets: []elbv2types.TargetDescription{
 			{
 				Id: aws.String(ipAddr),
 			},
@@ -426,19 +429,19 @@ func stubDeregisterTargetsInput(ipAddr string) *elbv2.DeregisterTargetsInput {
 	}
 }
 
-func stubReservation(imageID, instanceID string, privateIP string) *ec2.Reservation {
+func stubReservation(imageID, instanceID string, privateIP string) *ec2.RunInstancesOutput {
 	az := defaultAvailabilityZone
-	return &ec2.Reservation{
-		Instances: []*ec2.Instance{
+	return &ec2.RunInstancesOutput{
+		Instances: []ec2types.Instance{
 			{
 				ImageId:    aws.String(imageID),
 				InstanceId: aws.String(instanceID),
-				State: &ec2.InstanceState{
-					Name: aws.String(ec2.InstanceStateNamePending),
-					Code: aws.Int64(16),
+				State: &ec2types.InstanceState{
+					Name: ec2types.InstanceStateNamePending,
+					Code: aws.Int32(16),
 				},
 				LaunchTime: aws.Time(time.Now()),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					AvailabilityZone: &az,
 				},
 				PrivateIpAddress: aws.String(privateIP),
@@ -447,18 +450,18 @@ func stubReservation(imageID, instanceID string, privateIP string) *ec2.Reservat
 	}
 }
 
-func stubReservationEdgeZones(ami, iid, privateIP, zoneName string) *ec2.Reservation {
-	return &ec2.Reservation{
-		Instances: []*ec2.Instance{
+func stubReservationEdgeZones(ami, iid, privateIP, zoneName string) *ec2.RunInstancesOutput {
+	return &ec2.RunInstancesOutput{
+		Instances: []ec2types.Instance{
 			{
 				ImageId:    aws.String(ami),
 				InstanceId: aws.String(iid),
-				State: &ec2.InstanceState{
-					Name: aws.String(ec2.InstanceStateNamePending),
-					Code: aws.Int64(16),
+				State: &ec2types.InstanceState{
+					Name: ec2types.InstanceStateNamePending,
+					Code: aws.Int32(16),
 				},
 				LaunchTime: aws.Time(time.Now()),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					AvailabilityZone: aws.String(zoneName),
 				},
 				PrivateIpAddress: aws.String(privateIP),
@@ -469,15 +472,15 @@ func stubReservationEdgeZones(ami, iid, privateIP, zoneName string) *ec2.Reserva
 
 func stubDescribeInstancesOutput(imageID, instanceID string, state string, privateIP string) *ec2.DescribeInstancesOutput {
 	return &ec2.DescribeInstancesOutput{
-		Reservations: []*ec2.Reservation{
+		Reservations: []ec2types.Reservation{
 			{
-				Instances: []*ec2.Instance{
+				Instances: []ec2types.Instance{
 					{
 						ImageId:    aws.String(imageID),
 						InstanceId: aws.String(instanceID),
-						State: &ec2.InstanceState{
-							Name: aws.String(state),
-							Code: aws.Int64(16),
+						State: &ec2types.InstanceState{
+							Name: ec2types.InstanceStateName(state),
+							Code: aws.Int32(16),
 						},
 						LaunchTime:       aws.Time(time.Now()),
 						PublicIpAddress:  aws.String(privateIP),
@@ -493,16 +496,16 @@ func stubDescribeInstancesOutput(imageID, instanceID string, state string, priva
 
 func stubDescribeInstancesInput(instanceID string) *ec2.DescribeInstancesInput {
 	return &ec2.DescribeInstancesInput{
-		InstanceIds: aws.StringSlice([]string{instanceID}),
+		InstanceIds: []string{instanceID},
 	}
 }
 
 func stubDescribeInstancesInputFromName() *ec2.DescribeInstancesInput {
 	return &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+		Filters: []ec2types.Filter{
 			{
 				Name:   awsTagFilter("Name"),
-				Values: aws.StringSlice([]string{stubMachineName}),
+				Values: []string{stubMachineName},
 			},
 			clusterFilter(stubClusterID),
 		},
@@ -513,12 +516,12 @@ func stubDescribeInstancesInputFromName() *ec2.DescribeInstancesInput {
 func StubDescribeDHCPOptions() (*ec2.DescribeDhcpOptionsOutput, error) {
 	key := "key"
 	return &ec2.DescribeDhcpOptionsOutput{
-		DhcpOptions: []*ec2.DhcpOptions{
+		DhcpOptions: []ec2types.DhcpOptions{
 			{
-				DhcpConfigurations: []*ec2.DhcpConfiguration{
+				DhcpConfigurations: []ec2types.DhcpConfiguration{
 					{
 						Key:    &key,
-						Values: []*ec2.AttributeValue{},
+						Values: []ec2types.AttributeValue{},
 					},
 				},
 			},
@@ -529,7 +532,7 @@ func StubDescribeDHCPOptions() (*ec2.DescribeDhcpOptionsOutput, error) {
 // StubDescribeVPCs provides fake output
 func StubDescribeVPCs() (*ec2.DescribeVpcsOutput, error) {
 	return &ec2.DescribeVpcsOutput{
-		Vpcs: []*ec2.Vpc{
+		Vpcs: []ec2types.Vpc{
 			{
 				VpcId: aws.String("vpc-32677e0e794418639"),
 			},

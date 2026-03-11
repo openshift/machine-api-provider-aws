@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
@@ -42,13 +42,13 @@ func (r *Reconciler) create() error {
 	klog.Infof("%s: creating machine", r.machine.Name)
 
 	if instances, err := r.getMachineInstances(); err == nil && len(instances) > 0 {
-		klog.Infof("%s: found existing instance %s for machine", r.machine.Name, aws.StringValue(instances[0].InstanceId))
+		klog.Infof("%s: found existing instance %s for machine", r.machine.Name, aws.ToString(instances[0].InstanceId))
 
 		if r.checkIfInstanceTerminated(instances[0]) {
 			// The instance exists, but is in a terminated state.
 			// This means the instance was terminated prior to MAPI realizing it existed.
 			// We should fail the machine in this scenario else we end up in a forever loop.
-			return machinecontroller.InvalidMachineConfiguration("Instance %s is in a terminated state", aws.StringValue(instances[0].InstanceId))
+			return machinecontroller.InvalidMachineConfiguration("Instance %s is in a terminated state", aws.ToString(instances[0].InstanceId))
 		}
 
 		// If we got here, then Exists failed to find the instance, and we were asked to create a new instance.
@@ -116,7 +116,7 @@ func (r *Reconciler) create() error {
 	}
 
 	klog.Infof("Created Machine %v", r.machine.Name)
-	r.machineScope.setProviderStatus(instance, conditionSuccess())
+	r.machineScope.setProviderStatus(&instance, conditionSuccess())
 
 	// Set the allocated dedicated host ID in the provider status if one was allocated
 	if allocatedHostID != "" {
@@ -158,7 +158,7 @@ func (r *Reconciler) delete() error {
 	}
 
 	isTerminated := r.checkIfInstanceTerminated(existingInstances[0])
-	var terminatingInstances []*ec2.InstanceStateChange
+	var terminatingInstances []ec2types.InstanceStateChange
 
 	if !isTerminated {
 		if err := r.removeFromLoadBalancers(existingInstances); err != nil {
@@ -187,8 +187,8 @@ func (r *Reconciler) delete() error {
 	}
 
 	if len(terminatingInstances) == 1 {
-		if terminatingInstances[0] != nil && terminatingInstances[0].CurrentState != nil && terminatingInstances[0].CurrentState.Name != nil {
-			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(terminatingInstances[0].CurrentState.Name)
+		if terminatingInstances[0].CurrentState != nil {
+			r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = string(terminatingInstances[0].CurrentState.Name)
 		}
 	} else if isTerminated {
 		// Check if we need to release a dynamically allocated dedicated host since the instance is now terminated (which removes it from host)
@@ -207,7 +207,7 @@ func (r *Reconciler) delete() error {
 			}
 		}
 
-		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = ec2.InstanceStateNameTerminated
+		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = string(ec2types.InstanceStateNameTerminated)
 	}
 
 	klog.Infof("Deleted machine %v", r.machine.Name)
@@ -255,7 +255,10 @@ func (r *Reconciler) update() error {
 			// In this case, we got a response saying that the machine existed, but we have no provider ID in spec.
 			// This means we never completed an Update flow.
 			// Set the provider ID before we clear the status, this will force the machine into failed.
-			err = r.setProviderID(&ec2.Instance{InstanceId: r.providerStatus.InstanceID, Placement: &ec2.Placement{AvailabilityZone: ptr.To(r.providerSpec.Placement.AvailabilityZone)}})
+			err = r.setProviderID(ec2types.Instance{
+				InstanceId: r.providerStatus.InstanceID,
+				Placement:  &ec2types.Placement{AvailabilityZone: ptr.To(r.providerSpec.Placement.AvailabilityZone)},
+			})
 			if err != nil {
 				return fmt.Errorf("failed to set provider ID: %w", err)
 			}
@@ -271,7 +274,7 @@ func (r *Reconciler) update() error {
 	sortInstances(existingInstances)
 	runningInstances := getRunningFromInstances(existingInstances)
 	runningLen := len(runningInstances)
-	var newestInstance *ec2.Instance
+	var newestInstance ec2types.Instance
 
 	clusterID, ok := getClusterID(r.machine)
 	if !ok {
@@ -323,7 +326,7 @@ func (r *Reconciler) update() error {
 
 	klog.Infof("Updated machine %s", r.machine.Name)
 
-	r.machineScope.setProviderStatus(newestInstance, conditionSuccess())
+	r.machineScope.setProviderStatus(&newestInstance, conditionSuccess())
 
 	return r.requeueIfInstancePending(newestInstance)
 }
@@ -364,7 +367,7 @@ func (r *Reconciler) exists() (bool, error) {
 		return false, nil
 	}
 
-	return existingInstances[0] != nil, err
+	return existingInstances[0].InstanceId != nil, err
 }
 
 // isMaster returns true if the machine is part of a cluster's control plane
@@ -391,9 +394,9 @@ func (r *Reconciler) isMaster() (bool, error) {
 }
 
 // updateLoadBalancers adds a given machine instance to the load balancers specified in its provider config
-func (r *Reconciler) updateLoadBalancers(instance *ec2.Instance) error {
+func (r *Reconciler) updateLoadBalancers(instance ec2types.Instance) error {
 	if len(r.providerSpec.LoadBalancers) == 0 {
-		klog.V(4).Infof("%s: Instance %q has no load balancers configured. Skipping", r.machine.Name, *instance.InstanceId)
+		klog.V(4).Infof("%s: Instance %q has no load balancers configured. Skipping", r.machine.Name, aws.ToString(instance.InstanceId))
 		return nil
 	}
 	errs := []error{}
@@ -429,8 +432,8 @@ func (r *Reconciler) updateLoadBalancers(instance *ec2.Instance) error {
 	return nil
 }
 
-// updateLoadBalancers adds a given machine instance to the load balancers specified in its provider config
-func (r *Reconciler) removeFromLoadBalancers(instances []*ec2.Instance) error {
+// removeFromLoadBalancers removes machine instances from the load balancers specified in its provider config
+func (r *Reconciler) removeFromLoadBalancers(instances []ec2types.Instance) error {
 	if len(r.providerSpec.LoadBalancers) == 0 {
 		klog.V(4).Infof("%s: Instances have no load balancers configured. Skipping", r.machine.Name)
 		return nil
@@ -459,16 +462,16 @@ func (r *Reconciler) removeFromLoadBalancers(instances []*ec2.Instance) error {
 }
 
 // setProviderID adds providerID in the machine spec
-func (r *Reconciler) setProviderID(instance *ec2.Instance) error {
+func (r *Reconciler) setProviderID(instance ec2types.Instance) error {
 	existingProviderID := r.machine.Spec.ProviderID
-	if instance == nil {
+	if instance.InstanceId == nil {
 		return nil
 	}
 	availabilityZone := ""
 	if instance.Placement != nil {
-		availabilityZone = aws.StringValue(instance.Placement.AvailabilityZone)
+		availabilityZone = aws.ToString(instance.Placement.AvailabilityZone)
 	}
-	providerID := fmt.Sprintf("aws:///%s/%s", availabilityZone, aws.StringValue(instance.InstanceId))
+	providerID := fmt.Sprintf("aws:///%s/%s", availabilityZone, aws.ToString(instance.InstanceId))
 
 	if existingProviderID != nil && *existingProviderID == providerID {
 		klog.Infof("%s: ProviderID already set in the machine Spec with value:%s", r.machine.Name, *existingProviderID)
@@ -479,8 +482,8 @@ func (r *Reconciler) setProviderID(instance *ec2.Instance) error {
 	return nil
 }
 
-func (r *Reconciler) setMachineCloudProviderSpecifics(instance *ec2.Instance) error {
-	if instance == nil {
+func (r *Reconciler) setMachineCloudProviderSpecifics(instance ec2types.Instance) error {
+	if instance.InstanceId == nil {
 		return nil
 	}
 
@@ -497,7 +500,7 @@ func (r *Reconciler) setMachineCloudProviderSpecifics(instance *ec2.Instance) er
 	}
 
 	// Reaching to machine provider config since the region is not directly
-	// providing by *ec2.Instance object
+	// providing by ec2types.Instance object
 	machineProviderConfig, err := ProviderSpecFromRawExtension(r.machine.Spec.ProviderSpec.Value)
 	if err != nil {
 		return fmt.Errorf("error decoding MachineProviderConfig: %w", err)
@@ -506,18 +509,18 @@ func (r *Reconciler) setMachineCloudProviderSpecifics(instance *ec2.Instance) er
 	r.machine.Labels[machinecontroller.MachineRegionLabelName] = machineProviderConfig.Placement.Region
 
 	if instance.Placement != nil {
-		r.machine.Labels[machinecontroller.MachineAZLabelName] = aws.StringValue(instance.Placement.AvailabilityZone)
+		r.machine.Labels[machinecontroller.MachineAZLabelName] = aws.ToString(instance.Placement.AvailabilityZone)
 	}
 
-	if instance.InstanceType != nil {
-		r.machine.Labels[machinecontroller.MachineInstanceTypeLabelName] = aws.StringValue(instance.InstanceType)
+	if instance.InstanceType != "" {
+		r.machine.Labels[machinecontroller.MachineInstanceTypeLabelName] = string(instance.InstanceType)
 	}
 
-	if instance.State != nil && instance.State.Name != nil {
-		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = aws.StringValue(instance.State.Name)
+	if instance.State != nil {
+		r.machine.Annotations[machinecontroller.MachineInstanceStateAnnotationName] = string(instance.State.Name)
 	}
 
-	if instance.InstanceLifecycle != nil && *instance.InstanceLifecycle == ec2.InstanceLifecycleTypeSpot {
+	if instance.InstanceLifecycle == ec2types.InstanceLifecycleTypeSpot {
 		// Label on the Machine so that an MHC can select spot instances
 		r.machine.Labels[machinecontroller.MachineInterruptibleInstanceLabelName] = ""
 		// Label on the Spec so that it is propogated to the Node
@@ -527,11 +530,11 @@ func (r *Reconciler) setMachineCloudProviderSpecifics(instance *ec2.Instance) er
 	return nil
 }
 
-func (r *Reconciler) requeueIfInstancePending(instance *ec2.Instance) error {
+func (r *Reconciler) requeueIfInstancePending(instance ec2types.Instance) error {
 	// If machine state is still pending, we will return an error to keep the controllers
 	// attempting to update status until it hits a more permanent state. This will ensure
 	// we get a public IP populated more quickly.
-	if instance.State != nil && *instance.State.Name == ec2.InstanceStateNamePending {
+	if instance.State != nil && instance.State.Name == ec2types.InstanceStateNamePending {
 		klog.Infof("%s: Instance state still pending, returning an error to requeue", r.machine.Name)
 		return &machinecontroller.RequeueAfterError{RequeueAfter: requeueAfterSeconds * time.Second}
 	}
@@ -540,10 +543,10 @@ func (r *Reconciler) requeueIfInstancePending(instance *ec2.Instance) error {
 }
 
 // Check if an instance is terminated so that we can handle it appropriately
-func (r *Reconciler) checkIfInstanceTerminated(instance *ec2.Instance) bool {
+func (r *Reconciler) checkIfInstanceTerminated(instance ec2types.Instance) bool {
 
-	if instance != nil && instance.State != nil &&
-		aws.StringValue(instance.State.Name) == ec2.InstanceStateNameTerminated {
+	if instance.State != nil &&
+		instance.State.Name == ec2types.InstanceStateNameTerminated {
 		klog.Infof("%s: Instance state terminated", r.machine.Name)
 		return true
 	}
@@ -551,7 +554,7 @@ func (r *Reconciler) checkIfInstanceTerminated(instance *ec2.Instance) bool {
 	return false
 }
 
-func (r *Reconciler) getMachineInstances() ([]*ec2.Instance, error) {
+func (r *Reconciler) getMachineInstances() ([]ec2types.Instance, error) {
 	// If there is a non-empty instance ID, search using that, otherwise
 	// fallback to filtering based on tags.
 	if r.providerStatus.InstanceID != nil && *r.providerStatus.InstanceID != "" {
@@ -560,7 +563,7 @@ func (r *Reconciler) getMachineInstances() ([]*ec2.Instance, error) {
 			klog.Warningf("%s: Failed to find existing instance by id %s: %v", r.machine.Name, *r.providerStatus.InstanceID, err)
 		} else {
 			klog.Infof("%s: Found instance by id: %s", r.machine.Name, *r.providerStatus.InstanceID)
-			return []*ec2.Instance{i}, nil
+			return []ec2types.Instance{i}, nil
 		}
 	}
 

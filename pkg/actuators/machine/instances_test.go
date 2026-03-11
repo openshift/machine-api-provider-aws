@@ -8,8 +8,9 @@ import (
 
 	gmg "github.com/onsi/gomega"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
@@ -23,31 +24,31 @@ import (
 
 func TestRemoveDuplicatedTags(t *testing.T) {
 	cases := []struct {
-		tagList  []*ec2.Tag
-		expected []*ec2.Tag
+		tagList  []ec2types.Tag
+		expected []ec2types.Tag
 	}{
 		{
 			// empty tags
-			tagList:  []*ec2.Tag{},
-			expected: []*ec2.Tag{},
+			tagList:  []ec2types.Tag{},
+			expected: []ec2types.Tag{},
 		},
 		{
 			// no duplicate tags
-			tagList: []*ec2.Tag{
+			tagList: []ec2types.Tag{
 				{Key: aws.String("clusterID"), Value: aws.String("test-ClusterIDValue")},
 			},
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("clusterID"), Value: aws.String("test-ClusterIDValue")},
 			},
 		},
 		{
 			// multiple duplicate tags
-			tagList: []*ec2.Tag{
+			tagList: []ec2types.Tag{
 				{Key: aws.String("clusterID"), Value: aws.String("test-ClusterIDValue")},
 				{Key: aws.String("clusterSize"), Value: aws.String("test-ClusterSizeValue")},
 				{Key: aws.String("clusterSize"), Value: aws.String("test-ClusterSizeDuplicatedValue")},
 			},
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("clusterID"), Value: aws.String("test-ClusterIDValue")},
 				{Key: aws.String("clusterSize"), Value: aws.String("test-ClusterSizeValue")},
 			},
@@ -67,7 +68,7 @@ func TestBuildTagList(t *testing.T) {
 		name            string
 		machineSpecTags []machinev1beta1.TagSpecification
 		infra           *configv1.Infrastructure
-		expected        []*ec2.Tag
+		expected        []ec2types.Tag
 	}{
 		{
 			name:            "with empty infra and provider spec should return default tags",
@@ -81,7 +82,7 @@ func TestBuildTagList(t *testing.T) {
 					},
 				},
 			},
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
 			},
@@ -90,7 +91,7 @@ func TestBuildTagList(t *testing.T) {
 			name:            "with empty infra should return default tags",
 			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra:           &configv1.Infrastructure{}, // should work with empty infra object
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
 			},
@@ -99,7 +100,7 @@ func TestBuildTagList(t *testing.T) {
 			name:            "with nil infra should  return default tags",
 			machineSpecTags: []machinev1beta1.TagSpecification{},
 			infra:           nil, // should work with nil infra object
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
 			},
@@ -113,7 +114,7 @@ func TestBuildTagList(t *testing.T) {
 			},
 			infra: nil,
 			// Invalid tags get dropped and the valid clusterID and Name get applied last.
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("good"), Value: aws.String("goodvalue")},
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
@@ -145,7 +146,7 @@ func TestBuildTagList(t *testing.T) {
 				},
 			},
 			// Invalid tags get dropped and the valid clusterID and Name get applied last.
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("good"), Value: aws.String("goodvalue")},
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
@@ -172,7 +173,7 @@ func TestBuildTagList(t *testing.T) {
 					},
 				},
 			},
-			expected: []*ec2.Tag{
+			expected: []ec2types.Tag{
 				{Key: aws.String("good"), Value: aws.String("goodvalue")},
 				{Key: aws.String("kubernetes.io/cluster/clusterID"), Value: aws.String("owned")},
 				{Key: aws.String("Name"), Value: aws.String("machineName")},
@@ -207,14 +208,14 @@ func TestBuildEC2Filters(t *testing.T) {
 		},
 	}
 
-	expected := []*ec2.Filter{
+	expected := []ec2types.Filter{
 		{
 			Name:   &filter1,
-			Values: []*string{&value1, &value2},
+			Values: []string{value1, value2},
 		},
 		{
 			Name:   &filter2,
-			Values: []*string{&value3},
+			Values: []string{value3},
 		},
 	}
 
@@ -234,8 +235,8 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 
 	mockCtrl := gomock.NewController(t)
 	mockAWSClient := mockaws.NewMockClient(mockCtrl)
-	mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(&ec2.DescribeImagesOutput{
-		Images: []*ec2.Image{
+	mockAWSClient.EXPECT().DescribeImages(gomock.Any(), gomock.Any()).Return(&ec2.DescribeImagesOutput{
+		Images: []ec2types.Image{
 			{
 				CreationDate:   aws.String(time.RFC3339),
 				ImageId:        aws.String("ami-1111"),
@@ -256,12 +257,12 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 	}
 
-	oneExpectedBlockDevice := []*ec2.BlockDeviceMapping{
+	oneExpectedBlockDevice := []ec2types.BlockDeviceMapping{
 		{
 			DeviceName: &rootDeviceName,
-			Ebs: &ec2.EbsBlockDevice{
-				VolumeSize:          &volumeSize,
-				VolumeType:          &volumeType,
+			Ebs: &ec2types.EbsBlockDevice{
+				VolumeSize:          aws.Int32(int32(volumeSize)),
+				VolumeType:          ec2types.VolumeType(volumeType),
 				DeleteOnTermination: &deleteOnTermination,
 			},
 			NoDevice:    nil,
@@ -290,12 +291,12 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 	}
 
-	twoExpectedDevices := []*ec2.BlockDeviceMapping{
+	twoExpectedDevices := []ec2types.BlockDeviceMapping{
 		{
 			DeviceName: &rootDeviceName,
-			Ebs: &ec2.EbsBlockDevice{
-				VolumeSize:          &volumeSize,
-				VolumeType:          &volumeType,
+			Ebs: &ec2types.EbsBlockDevice{
+				VolumeSize:          aws.Int32(int32(volumeSize)),
+				VolumeType:          ec2types.VolumeType(volumeType),
 				DeleteOnTermination: &deleteOnTermination,
 			},
 			NoDevice:    nil,
@@ -303,9 +304,9 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 		},
 		{
 			DeviceName: &deviceName2,
-			Ebs: &ec2.EbsBlockDevice{
-				VolumeSize:          &volumeSize2,
-				VolumeType:          &volumeType,
+			Ebs: &ec2types.EbsBlockDevice{
+				VolumeSize:          aws.Int32(int32(volumeSize2)),
+				VolumeType:          ec2types.VolumeType(volumeType),
 				DeleteOnTermination: &deleteOnTermination,
 			},
 			NoDevice:    nil,
@@ -324,13 +325,13 @@ func TestGetBlockDeviceMappings(t *testing.T) {
 	testCases := []struct {
 		description  string
 		blockDevices []machinev1beta1.BlockDeviceMappingSpec
-		expected     []*ec2.BlockDeviceMapping
+		expected     []ec2types.BlockDeviceMapping
 		expectedErr  bool
 	}{
 		{
 			description:  "When it gets an empty blockDevices list",
 			blockDevices: []machinev1beta1.BlockDeviceMappingSpec{},
-			expected:     []*ec2.BlockDeviceMapping{},
+			expected:     []ec2types.BlockDeviceMapping{},
 		},
 		{
 			description:  "When it gets one blockDevice",
@@ -395,9 +396,9 @@ func TestRemoveStoppedMachine(t *testing.T) {
 		{
 			name: "No instances to stop",
 			output: &ec2.DescribeInstancesOutput{
-				Reservations: []*ec2.Reservation{
+				Reservations: []ec2types.Reservation{
 					{
-						Instances: []*ec2.Instance{},
+						Instances: []ec2types.Instance{},
 					},
 				},
 			},
@@ -405,9 +406,9 @@ func TestRemoveStoppedMachine(t *testing.T) {
 		{
 			name: "One instance to stop",
 			output: &ec2.DescribeInstancesOutput{
-				Reservations: []*ec2.Reservation{
+				Reservations: []ec2types.Reservation{
 					{
-						Instances: []*ec2.Instance{
+						Instances: []ec2types.Instance{
 							stubInstance(stubAMIID, stubInstanceID, true),
 						},
 					},
@@ -417,9 +418,9 @@ func TestRemoveStoppedMachine(t *testing.T) {
 		{
 			name: "Two instances to stop",
 			output: &ec2.DescribeInstancesOutput{
-				Reservations: []*ec2.Reservation{
+				Reservations: []ec2types.Reservation{
 					{
-						Instances: []*ec2.Instance{
+						Instances: []ec2types.Instance{
 							stubInstance(stubAMIID, stubInstanceID, true),
 							stubInstance("ami-a9acbbd7", "i-02fcb933c5da7085d", true),
 						},
@@ -435,8 +436,8 @@ func TestRemoveStoppedMachine(t *testing.T) {
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
 			// Not here to check how many times all the mocked methods get called.
 			// Rather to provide fake outputs to get through all possible execution paths.
-			mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(tc.output, tc.err).AnyTimes()
-			mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).AnyTimes()
+			mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(tc.output, tc.err).AnyTimes()
+			mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), gomock.Any()).AnyTimes()
 			removeStoppedMachine(machine, mockAWSClient)
 		})
 	}
@@ -479,7 +480,7 @@ func TestLaunchInstance(t *testing.T) {
 		azErr               error
 		imageOutput         *ec2.DescribeImagesOutput
 		imageErr            error
-		instancesOutput     *ec2.Reservation
+		instancesOutput     *ec2.RunInstancesOutput
 		instancesErr        error
 		objects             []runtime.Object
 		succeeds            bool
@@ -496,38 +497,38 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			),
 			securityGroupOutput: &ec2.DescribeSecurityGroupsOutput{
-				SecurityGroups: []*ec2.SecurityGroup{
+				SecurityGroups: []ec2types.SecurityGroup{
 					{
 						GroupId: aws.String("groupID"),
 					},
 				},
 			},
-			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups:                   []*string{aws.String("groupID")},
+						Groups:                   []string{"groupID"},
 					},
 				},
 				UserData: aws.String(""),
@@ -554,7 +555,7 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			),
 			securityGroupOutput: &ec2.DescribeSecurityGroupsOutput{
-				SecurityGroups: []*ec2.SecurityGroup{
+				SecurityGroups: []ec2types.SecurityGroup{
 					{
 						GroupId: aws.String("groupID1"),
 					},
@@ -563,32 +564,32 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
-			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
-						Groups:                   []*string{aws.String("groupID1"), aws.String("groupID2")},
+						Groups:                   []string{"groupID1", "groupID2"},
 					},
 				},
 				UserData: aws.String(""),
@@ -604,27 +605,27 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			),
 			securityGroupOutput: &ec2.DescribeSecurityGroupsOutput{
-				SecurityGroups: []*ec2.SecurityGroup{},
+				SecurityGroups: []ec2types.SecurityGroup{},
 			},
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 					},
@@ -642,31 +643,31 @@ func TestLaunchInstance(t *testing.T) {
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 aws.String("subnetID"),
 						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					AvailabilityZone: aws.String("us-east-1a"),
 				},
 			},
@@ -698,36 +699,36 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			}),
 			imageOutput: &ec2.DescribeImagesOutput{
-				Images: []*ec2.Image{
+				Images: []ec2types.Image{
 					{
 						CreationDate: aws.String("2006-01-02T15:04:05Z"),
 						ImageId:      aws.String("ami-1111"),
 					},
 				},
 			},
-			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String("ami-1111"),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
@@ -754,34 +755,34 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			}),
 			imageOutput: &ec2.DescribeImagesOutput{
-				Images: []*ec2.Image{},
+				Images: []ec2types.Image{},
 			},
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 aws.String("subnetID"),
 						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					AvailabilityZone: aws.String("us-east-1a"),
 				},
 			},
@@ -797,7 +798,7 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			}),
 			imageOutput: &ec2.DescribeImagesOutput{
-				Images: []*ec2.Image{
+				Images: []ec2types.Image{
 					{
 						CreationDate: aws.String("2006-01-02T15:04:05Z"),
 						ImageId:      aws.String("ami-1111"),
@@ -808,29 +809,29 @@ func TestLaunchInstance(t *testing.T) {
 					},
 				},
 			},
-			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String("ami-1111"),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
@@ -846,35 +847,35 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "Dedicated instance tenancy",
 			providerConfig: stubDedicatedInstanceTenancy(),
-			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
-				Placement: &ec2.Placement{
-					Tenancy: aws.String("dedicated"),
+				Placement: &ec2types.Placement{
+					Tenancy: ec2types.TenancyDedicated,
 				},
 			},
 		},
@@ -882,12 +883,12 @@ func TestLaunchInstance(t *testing.T) {
 			name:           "Dedicated instance tenancy",
 			providerConfig: stubInvalidInstanceTenancy(),
 			subnetOutput: &ec2.DescribeSubnetsOutput{
-				Subnets: []*ec2.Subnet{
+				Subnets: []ec2types.Subnet{
 					stubSubnet("subnetID", defaultAvailabilityZone),
 				},
 			},
 			zonesOutput: &ec2.DescribeAvailabilityZonesOutput{
-				AvailabilityZones: []*ec2.AvailabilityZone{
+				AvailabilityZones: []ec2types.AvailabilityZone{
 					stubAvailabilityZone(defaultAvailabilityZone, "availability-zone"),
 				},
 			},
@@ -896,27 +897,27 @@ func TestLaunchInstance(t *testing.T) {
 			name:           "Attach infrastructure object tags",
 			providerConfig: providerConfig,
 			infra:          infra,
-			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagListWithInfraObject,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagListWithInfraObject,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
@@ -931,27 +932,27 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig:  stubEFANetworkInterfaceType(),
 			succeeds:        true,
 			infra:           infra,
-			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:    stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:     stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagListWithInfraObject,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagListWithInfraObject,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
@@ -966,27 +967,27 @@ func TestLaunchInstance(t *testing.T) {
 			providerConfig: stubInvalidNetworkInterfaceType(),
 			succeeds:       false,
 			infra:          infra,
-			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagListWithInfraObject,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagListWithInfraObject,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
@@ -999,34 +1000,34 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "With custom placement group name",
 			providerConfig: stubInstancePlacementGroupName("placement-group1"),
-			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					GroupName: aws.String("placement-group1"),
 				},
 			},
@@ -1034,36 +1035,36 @@ func TestLaunchInstance(t *testing.T) {
 		{
 			name:           "With custom placement group name and partition number",
 			providerConfig: stubInstancePlacementGroupPartition("placement-group1", 4),
-			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.StringValue(providerConfig.Subnet.ID)),
+			subnetOutput:   stubDescribeSubnetsOutputProvided(aws.ToString(providerConfig.Subnet.ID)),
 			zonesOutput:    stubDescribeAvailabilityZonesOutputDefault(),
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						AssociatePublicIpAddress: providerConfig.PublicIP,
 						SubnetId:                 providerConfig.Subnet.ID,
 						Groups:                   stubSecurityGroupsDefault,
 					},
 				},
 				UserData: aws.String(""),
-				Placement: &ec2.Placement{
+				Placement: &ec2types.Placement{
 					GroupName:       aws.String("placement-group1"),
-					PartitionNumber: aws.Int64(4),
+					PartitionNumber: aws.Int32(4),
 				},
 			},
 		},
@@ -1079,25 +1080,25 @@ func TestLaunchInstance(t *testing.T) {
 			instancesOutput: stubReservationEdgeZones(stubAMIID, stubInstanceID, "192.168.0.10", defaultWavelengthZone),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: aws.String("m5d.2xlarge"),
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType("m5d.2xlarge"),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
 						AssociateCarrierIpAddress: aws.Bool(true),
-						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:               aws.Int32(int32(providerConfig.DeviceIndex)),
 						SubnetId:                  aws.String(stubSubnetID),
 						Groups:                    stubSecurityGroupsDefault,
 					},
@@ -1117,25 +1118,25 @@ func TestLaunchInstance(t *testing.T) {
 			instancesOutput: stubReservationEdgeZones(stubAMIID, stubInstanceID, "192.168.0.10", defaultWavelengthZone),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: aws.String("m5d.2xlarge"),
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType("m5d.2xlarge"),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
 						AssociateCarrierIpAddress: aws.Bool(false),
-						DeviceIndex:               aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:               aws.Int32(int32(providerConfig.DeviceIndex)),
 						SubnetId:                  aws.String(stubSubnetID),
 						Groups:                    stubSecurityGroupsDefault,
 					},
@@ -1154,25 +1155,25 @@ func TestLaunchInstance(t *testing.T) {
 			instancesOutput: stubReservation(stubAMIID, stubInstanceID, "192.168.0.10"),
 			succeeds:        true,
 			runInstancesInput: &ec2.RunInstancesInput{
-				IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
+				IamInstanceProfile: &ec2types.IamInstanceProfileSpecification{
 					Name: aws.String(*providerConfig.IAMInstanceProfile.ID),
 				},
 				ImageId:      aws.String(*providerConfig.AMI.ID),
-				InstanceType: &providerConfig.InstanceType,
-				MinCount:     aws.Int64(1),
-				MaxCount:     aws.Int64(1),
+				InstanceType: ec2types.InstanceType(providerConfig.InstanceType),
+				MinCount:     aws.Int32(1),
+				MaxCount:     aws.Int32(1),
 				KeyName:      providerConfig.KeyName,
-				TagSpecifications: []*ec2.TagSpecification{{
-					ResourceType: aws.String("instance"),
+				TagSpecifications: []ec2types.TagSpecification{{
+					ResourceType: ec2types.ResourceTypeInstance,
 					Tags:         stubTagList,
 				}, {
-					ResourceType: aws.String("volume"),
+					ResourceType: ec2types.ResourceTypeVolume,
 					Tags:         stubTagList,
 				}},
-				NetworkInterfaces: []*ec2.InstanceNetworkInterfaceSpecification{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterfaceSpecification{
 					{
 						AssociatePublicIpAddress: aws.Bool(false),
-						DeviceIndex:              aws.Int64(providerConfig.DeviceIndex),
+						DeviceIndex:              aws.Int32(int32(providerConfig.DeviceIndex)),
 						SubnetId:                 aws.String(stubSubnetID),
 						Groups:                   stubSecurityGroupsDefault,
 					},
@@ -1186,11 +1187,11 @@ func TestLaunchInstance(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
 
-			mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any()).Return(tc.securityGroupOutput, tc.securityGroupErr).AnyTimes()
-			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(tc.zonesOutput, nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(tc.subnetOutput, tc.subnetErr).AnyTimes()
-			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
-			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
+			mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any(), gomock.Any()).Return(tc.securityGroupOutput, tc.securityGroupErr).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any(), gomock.Any()).Return(tc.zonesOutput, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(tc.subnetOutput, tc.subnetErr).AnyTimes()
+			mockAWSClient.EXPECT().DescribeImages(gomock.Any(), gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
+			mockAWSClient.EXPECT().RunInstances(gomock.Any(), tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
 
 			fakeClient := fake.NewFakeClient(tc.objects...)
 
@@ -1210,7 +1211,7 @@ func TestLaunchInstance(t *testing.T) {
 }
 
 func TestSortInstances(t *testing.T) {
-	instances := []*ec2.Instance{
+	instances := []ec2types.Instance{
 		{
 			LaunchTime: aws.Time(time.Now()),
 		},
@@ -1232,7 +1233,7 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 	testCases := []struct {
 		name            string
 		providerConfig  *machinev1beta1.AWSMachineProviderConfig
-		expectedRequest *ec2.InstanceMarketOptionsRequest
+		expectedRequest *ec2types.InstanceMarketOptionsRequest
 		wantErr         bool
 	}{
 		{
@@ -1246,11 +1247,11 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
 				SpotMarketOptions: &machinev1beta1.SpotMarketOptions{},
 			},
-			expectedRequest: &ec2.InstanceMarketOptionsRequest{
-				MarketType: aws.String(ec2.MarketTypeSpot),
-				SpotOptions: &ec2.SpotMarketOptions{
-					InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
-					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+			expectedRequest: &ec2types.InstanceMarketOptionsRequest{
+				MarketType: ec2types.MarketTypeSpot,
+				SpotOptions: &ec2types.SpotMarketOptions{
+					InstanceInterruptionBehavior: ec2types.InstanceInterruptionBehaviorTerminate,
+					SpotInstanceType:             ec2types.SpotInstanceTypeOneTime,
 				},
 			},
 			wantErr: false,
@@ -1260,11 +1261,11 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
 				MarketType: machinev1beta1.MarketTypeSpot,
 			},
-			expectedRequest: &ec2.InstanceMarketOptionsRequest{
-				MarketType: aws.String(ec2.MarketTypeSpot),
-				SpotOptions: &ec2.SpotMarketOptions{
-					InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
-					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+			expectedRequest: &ec2types.InstanceMarketOptionsRequest{
+				MarketType: ec2types.MarketTypeSpot,
+				SpotOptions: &ec2types.SpotMarketOptions{
+					InstanceInterruptionBehavior: ec2types.InstanceInterruptionBehaviorTerminate,
+					SpotInstanceType:             ec2types.SpotInstanceTypeOneTime,
 				},
 			},
 			wantErr: false,
@@ -1294,11 +1295,11 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 					MaxPrice: aws.String(""),
 				},
 			},
-			expectedRequest: &ec2.InstanceMarketOptionsRequest{
-				MarketType: aws.String(ec2.MarketTypeSpot),
-				SpotOptions: &ec2.SpotMarketOptions{
-					InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
-					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+			expectedRequest: &ec2types.InstanceMarketOptionsRequest{
+				MarketType: ec2types.MarketTypeSpot,
+				SpotOptions: &ec2types.SpotMarketOptions{
+					InstanceInterruptionBehavior: ec2types.InstanceInterruptionBehaviorTerminate,
+					SpotInstanceType:             ec2types.SpotInstanceTypeOneTime,
 				},
 			},
 			wantErr: false,
@@ -1310,11 +1311,11 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 					MaxPrice: aws.String("0.01"),
 				},
 			},
-			expectedRequest: &ec2.InstanceMarketOptionsRequest{
-				MarketType: aws.String(ec2.MarketTypeSpot),
-				SpotOptions: &ec2.SpotMarketOptions{
-					InstanceInterruptionBehavior: aws.String(ec2.InstanceInterruptionBehaviorTerminate),
-					SpotInstanceType:             aws.String(ec2.SpotInstanceTypeOneTime),
+			expectedRequest: &ec2types.InstanceMarketOptionsRequest{
+				MarketType: ec2types.MarketTypeSpot,
+				SpotOptions: &ec2types.SpotMarketOptions{
+					InstanceInterruptionBehavior: ec2types.InstanceInterruptionBehaviorTerminate,
+					SpotInstanceType:             ec2types.SpotInstanceTypeOneTime,
 					MaxPrice:                     aws.String("0.01"),
 				},
 			},
@@ -1343,8 +1344,8 @@ func TestGetInstanceMarketOptionsRequest(t *testing.T) {
 				MarketType:            machinev1beta1.MarketTypeCapacityBlock,
 				CapacityReservationID: mockCapacityReservationID,
 			},
-			expectedRequest: &ec2.InstanceMarketOptionsRequest{
-				MarketType: aws.String(ec2.MarketTypeCapacityBlock),
+			expectedRequest: &ec2types.InstanceMarketOptionsRequest{
+				MarketType: ec2types.MarketTypeCapacityBlock,
 			},
 			wantErr: false,
 		},
@@ -1377,7 +1378,7 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 	testCases := []struct {
 		name           string
 		providerConfig *machinev1beta1.AWSMachineProviderConfig
-		expected       *ec2.InstanceMetadataOptionsRequest
+		expected       *ec2types.InstanceMetadataOptionsRequest
 	}{
 		{
 			name:           "no imds options specified",
@@ -1391,8 +1392,8 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 					Authentication: machinev1beta1.MetadataServiceAuthenticationRequired,
 				},
 			},
-			expected: &ec2.InstanceMetadataOptionsRequest{
-				HttpTokens: aws.String(ec2.HttpTokensStateRequired),
+			expected: &ec2types.InstanceMetadataOptionsRequest{
+				HttpTokens: ec2types.HttpTokensStateRequired,
 			},
 		},
 		{
@@ -1402,8 +1403,8 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 					Authentication: machinev1beta1.MetadataServiceAuthenticationOptional,
 				},
 			},
-			expected: &ec2.InstanceMetadataOptionsRequest{
-				HttpTokens: aws.String(ec2.HttpTokensStateOptional),
+			expected: &ec2types.InstanceMetadataOptionsRequest{
+				HttpTokens: ec2types.HttpTokensStateOptional,
 			},
 		},
 		{
@@ -1432,18 +1433,18 @@ func TestCorrectExistingTags(t *testing.T) {
 		t.Fatalf("Unable to build test machine manifest: %v", err)
 	}
 	clusterID, _ := getClusterID(machine)
-	instance := ec2.Instance{
+	instance := ec2types.Instance{
 		InstanceId: aws.String(stubInstanceID),
 	}
 	testCases := []struct {
 		name               string
-		tags               []*ec2.Tag
-		userTags           []*ec2.Tag
+		tags               []ec2types.Tag
+		userTags           []ec2types.Tag
 		expectedCreateTags bool
 	}{
 		{
 			name: "Valid Tags",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 					Value: aws.String("owned"),
@@ -1457,7 +1458,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		},
 		{
 			name: "Valid Tags and Create",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 					Value: aws.String("owned"),
@@ -1468,7 +1469,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags: []*ec2.Tag{
+			userTags: []ec2types.Tag{
 				{
 					Key:   aws.String("UserDefinedTag2"),
 					Value: aws.String("UserDefinedTagValue2"),
@@ -1477,7 +1478,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		},
 		{
 			name: "Valid Tags and Update",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 					Value: aws.String("owned"),
@@ -1492,7 +1493,7 @@ func TestCorrectExistingTags(t *testing.T) {
 				},
 			},
 			expectedCreateTags: true,
-			userTags: []*ec2.Tag{
+			userTags: []ec2types.Tag{
 				{
 					Key:   aws.String("UserDefinedTag1"),
 					Value: aws.String("ModifiedValue"),
@@ -1501,7 +1502,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		},
 		{
 			name: "Invalid Name Tag Correct Cluster",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 					Value: aws.String("owned"),
@@ -1515,7 +1516,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		},
 		{
 			name: "Invalid Cluster Tag Correct Name",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + "badcluster"),
 					Value: aws.String("owned"),
@@ -1529,7 +1530,7 @@ func TestCorrectExistingTags(t *testing.T) {
 		},
 		{
 			name: "Both Tags Wrong",
-			tags: []*ec2.Tag{
+			tags: []ec2types.Tag{
 				{
 					Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 					Value: aws.String("bad value"),
@@ -1556,10 +1557,10 @@ func TestCorrectExistingTags(t *testing.T) {
 			instance.Tags = tc.tags
 
 			if tc.expectedCreateTags {
-				mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).MinTimes(1)
+				mockAWSClient.EXPECT().CreateTags(gomock.Any(), gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).MinTimes(1)
 			}
 
-			err := correctExistingTags(machine, &instance, mockAWSClient, tc.userTags)
+			err := correctExistingTags(machine, instance, mockAWSClient, tc.userTags)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -1616,7 +1617,7 @@ func TestGetAvalabilityZoneTypeFromZoneName(t *testing.T) {
 
 			mockCtrl := gomock.NewController(t)
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
-			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(tc.args.zonesOutput, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any(), gomock.Any()).Return(tc.args.zonesOutput, nil).AnyTimes()
 
 			got, err := getAvalabilityZoneTypeFromZoneName(tc.args.zoneName, mockAWSClient)
 			if (err != nil) != tc.wantErr {
@@ -1639,7 +1640,7 @@ func TestGetCapacityReservationSpecification(t *testing.T) {
 	testCases := []struct {
 		name                  string
 		capacityReservationID string
-		expectedRequest       *ec2.CapacityReservationSpecification
+		expectedRequest       *ec2types.CapacityReservationSpecification
 		expectedError         error
 	}{
 		{
@@ -1675,8 +1676,8 @@ func TestGetCapacityReservationSpecification(t *testing.T) {
 		{
 			name:                  "with a valid CapacityReservationID specified",
 			capacityReservationID: mockCapacityReservationID,
-			expectedRequest: &ec2.CapacityReservationSpecification{
-				CapacityReservationTarget: &ec2.CapacityReservationTarget{
+			expectedRequest: &ec2types.CapacityReservationSpecification{
+				CapacityReservationTarget: &ec2types.CapacityReservationTarget{
 					CapacityReservationId: aws.String(mockCapacityReservationID),
 				},
 			},
@@ -1701,7 +1702,7 @@ func TestGetCPUOptionsRequest(t *testing.T) {
 	testCases := []struct {
 		name            string
 		providerConfig  *machinev1beta1.AWSMachineProviderConfig
-		expectedRequest *ec2.CpuOptionsRequest
+		expectedRequest *ec2types.CpuOptionsRequest
 	}{
 		{
 			name:            "with CPUOptions unspecified",
@@ -1715,8 +1716,8 @@ func TestGetCPUOptionsRequest(t *testing.T) {
 					ConfidentialCompute: ptr.To(machinev1beta1.AWSConfidentialComputePolicySEVSNP),
 				},
 			},
-			expectedRequest: &ec2.CpuOptionsRequest{
-				AmdSevSnp: aws.String(ec2.AmdSevSnpSpecificationEnabled),
+			expectedRequest: &ec2types.CpuOptionsRequest{
+				AmdSevSnp: ec2types.AmdSevSnpSpecificationEnabled,
 			},
 		},
 		{
@@ -1726,8 +1727,8 @@ func TestGetCPUOptionsRequest(t *testing.T) {
 					ConfidentialCompute: ptr.To(machinev1beta1.AWSConfidentialComputePolicyDisabled),
 				},
 			},
-			expectedRequest: &ec2.CpuOptionsRequest{
-				AmdSevSnp: aws.String(ec2.AmdSevSnpSpecificationDisabled),
+			expectedRequest: &ec2types.CpuOptionsRequest{
+				AmdSevSnp: ec2types.AmdSevSnpSpecificationDisabled,
 			},
 		},
 		{
@@ -1752,7 +1753,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 	testCases := []struct {
 		name     string
 		mutate   func(pc *machinev1beta1.AWSMachineProviderConfig)
-		expected *ec2.Placement
+		expected *ec2types.Placement
 		wantErr  bool
 	}{
 		{
@@ -1762,7 +1763,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 					Affinity: ptr.To(machinev1beta1.HostAffinityAnyAvailable),
 				}
 			},
-			expected: &ec2.Placement{
+			expected: &ec2types.Placement{
 				Affinity: aws.String("default"),
 			},
 		},
@@ -1778,9 +1779,9 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 					},
 				}
 			},
-			expected: &ec2.Placement{
+			expected: &ec2types.Placement{
 				Affinity: aws.String("host"),
-				Tenancy:  aws.String("host"),
+				Tenancy:  ec2types.TenancyHost,
 				HostId:   ptr.To(hostID),
 			},
 		},
@@ -1798,8 +1799,8 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 					},
 				}
 			},
-			expected: &ec2.Placement{
-				Tenancy:  aws.String("host"),
+			expected: &ec2types.Placement{
+				Tenancy:  ec2types.TenancyHost,
 				Affinity: aws.String("host"),
 				HostId:   ptr.To(hostID),
 			},

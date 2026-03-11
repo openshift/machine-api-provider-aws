@@ -5,12 +5,13 @@
 package mock
 
 import (
+	context "context"
 	reflect "reflect"
 
-	session "github.com/aws/aws-sdk-go/aws/session"
-	ec2 "github.com/aws/aws-sdk-go/service/ec2"
-	elb "github.com/aws/aws-sdk-go/service/elb"
-	elbv2 "github.com/aws/aws-sdk-go/service/elbv2"
+	aws "github.com/aws/aws-sdk-go-v2/aws"
+	ec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	elasticloadbalancing "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	elasticloadbalancingv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -38,363 +39,363 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // AllocateHosts mocks base method.
-func (m *MockClient) AllocateHosts(arg0 *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+func (m *MockClient) AllocateHosts(ctx context.Context, input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllocateHosts", arg0)
+	ret := m.ctrl.Call(m, "AllocateHosts", ctx, input)
 	ret0, _ := ret[0].(*ec2.AllocateHostsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AllocateHosts indicates an expected call of AllocateHosts.
-func (mr *MockClientMockRecorder) AllocateHosts(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) AllocateHosts(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateHosts", reflect.TypeOf((*MockClient)(nil).AllocateHosts), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateHosts", reflect.TypeOf((*MockClient)(nil).AllocateHosts), ctx, input)
 }
 
 // CreatePlacementGroup mocks base method.
-func (m *MockClient) CreatePlacementGroup(arg0 *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
+func (m *MockClient) CreatePlacementGroup(ctx context.Context, input *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreatePlacementGroup", arg0)
+	ret := m.ctrl.Call(m, "CreatePlacementGroup", ctx, input)
 	ret0, _ := ret[0].(*ec2.CreatePlacementGroupOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreatePlacementGroup indicates an expected call of CreatePlacementGroup.
-func (mr *MockClientMockRecorder) CreatePlacementGroup(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CreatePlacementGroup(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePlacementGroup", reflect.TypeOf((*MockClient)(nil).CreatePlacementGroup), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePlacementGroup", reflect.TypeOf((*MockClient)(nil).CreatePlacementGroup), ctx, input)
 }
 
 // CreateTags mocks base method.
-func (m *MockClient) CreateTags(arg0 *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+func (m *MockClient) CreateTags(ctx context.Context, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTags", arg0)
+	ret := m.ctrl.Call(m, "CreateTags", ctx, input)
 	ret0, _ := ret[0].(*ec2.CreateTagsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateTags indicates an expected call of CreateTags.
-func (mr *MockClientMockRecorder) CreateTags(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CreateTags(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTags", reflect.TypeOf((*MockClient)(nil).CreateTags), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTags", reflect.TypeOf((*MockClient)(nil).CreateTags), ctx, input)
 }
 
 // DeletePlacementGroup mocks base method.
-func (m *MockClient) DeletePlacementGroup(arg0 *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
+func (m *MockClient) DeletePlacementGroup(ctx context.Context, input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeletePlacementGroup", arg0)
+	ret := m.ctrl.Call(m, "DeletePlacementGroup", ctx, input)
 	ret0, _ := ret[0].(*ec2.DeletePlacementGroupOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DeletePlacementGroup indicates an expected call of DeletePlacementGroup.
-func (mr *MockClientMockRecorder) DeletePlacementGroup(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DeletePlacementGroup(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePlacementGroup", reflect.TypeOf((*MockClient)(nil).DeletePlacementGroup), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePlacementGroup", reflect.TypeOf((*MockClient)(nil).DeletePlacementGroup), ctx, input)
 }
 
 // DescribeAvailabilityZones mocks base method.
-func (m *MockClient) DescribeAvailabilityZones(arg0 *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+func (m *MockClient) DescribeAvailabilityZones(ctx context.Context, input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeAvailabilityZones", arg0)
+	ret := m.ctrl.Call(m, "DescribeAvailabilityZones", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeAvailabilityZonesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeAvailabilityZones indicates an expected call of DescribeAvailabilityZones.
-func (mr *MockClientMockRecorder) DescribeAvailabilityZones(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeAvailabilityZones(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeAvailabilityZones", reflect.TypeOf((*MockClient)(nil).DescribeAvailabilityZones), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeAvailabilityZones", reflect.TypeOf((*MockClient)(nil).DescribeAvailabilityZones), ctx, input)
 }
 
 // DescribeDHCPOptions mocks base method.
-func (m *MockClient) DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
+func (m *MockClient) DescribeDHCPOptions(ctx context.Context, input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeDHCPOptions", input)
+	ret := m.ctrl.Call(m, "DescribeDHCPOptions", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeDhcpOptionsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeDHCPOptions indicates an expected call of DescribeDHCPOptions.
-func (mr *MockClientMockRecorder) DescribeDHCPOptions(input interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeDHCPOptions(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDHCPOptions", reflect.TypeOf((*MockClient)(nil).DescribeDHCPOptions), input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDHCPOptions", reflect.TypeOf((*MockClient)(nil).DescribeDHCPOptions), ctx, input)
 }
 
 // DescribeHosts mocks base method.
-func (m *MockClient) DescribeHosts(arg0 *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
+func (m *MockClient) DescribeHosts(ctx context.Context, input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeHosts", arg0)
+	ret := m.ctrl.Call(m, "DescribeHosts", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeHostsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeHosts indicates an expected call of DescribeHosts.
-func (mr *MockClientMockRecorder) DescribeHosts(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeHosts(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeHosts", reflect.TypeOf((*MockClient)(nil).DescribeHosts), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeHosts", reflect.TypeOf((*MockClient)(nil).DescribeHosts), ctx, input)
 }
 
 // DescribeImages mocks base method.
-func (m *MockClient) DescribeImages(arg0 *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
+func (m *MockClient) DescribeImages(ctx context.Context, input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeImages", arg0)
+	ret := m.ctrl.Call(m, "DescribeImages", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeImagesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeImages indicates an expected call of DescribeImages.
-func (mr *MockClientMockRecorder) DescribeImages(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeImages(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeImages", reflect.TypeOf((*MockClient)(nil).DescribeImages), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeImages", reflect.TypeOf((*MockClient)(nil).DescribeImages), ctx, input)
 }
 
 // DescribeInstanceTypes mocks base method.
-func (m *MockClient) DescribeInstanceTypes(arg0 *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
+func (m *MockClient) DescribeInstanceTypes(ctx context.Context, input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeInstanceTypes", arg0)
+	ret := m.ctrl.Call(m, "DescribeInstanceTypes", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeInstanceTypesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeInstanceTypes indicates an expected call of DescribeInstanceTypes.
-func (mr *MockClientMockRecorder) DescribeInstanceTypes(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeInstanceTypes(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstanceTypes", reflect.TypeOf((*MockClient)(nil).DescribeInstanceTypes), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstanceTypes", reflect.TypeOf((*MockClient)(nil).DescribeInstanceTypes), ctx, input)
 }
 
 // DescribeInstances mocks base method.
-func (m *MockClient) DescribeInstances(arg0 *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
+func (m *MockClient) DescribeInstances(ctx context.Context, input *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeInstances", arg0)
+	ret := m.ctrl.Call(m, "DescribeInstances", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeInstancesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeInstances indicates an expected call of DescribeInstances.
-func (mr *MockClientMockRecorder) DescribeInstances(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeInstances(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstances", reflect.TypeOf((*MockClient)(nil).DescribeInstances), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstances", reflect.TypeOf((*MockClient)(nil).DescribeInstances), ctx, input)
 }
 
 // DescribePlacementGroups mocks base method.
-func (m *MockClient) DescribePlacementGroups(arg0 *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
+func (m *MockClient) DescribePlacementGroups(ctx context.Context, input *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribePlacementGroups", arg0)
+	ret := m.ctrl.Call(m, "DescribePlacementGroups", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribePlacementGroupsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribePlacementGroups indicates an expected call of DescribePlacementGroups.
-func (mr *MockClientMockRecorder) DescribePlacementGroups(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribePlacementGroups(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribePlacementGroups", reflect.TypeOf((*MockClient)(nil).DescribePlacementGroups), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribePlacementGroups", reflect.TypeOf((*MockClient)(nil).DescribePlacementGroups), ctx, input)
 }
 
 // DescribeSecurityGroups mocks base method.
-func (m *MockClient) DescribeSecurityGroups(arg0 *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+func (m *MockClient) DescribeSecurityGroups(ctx context.Context, input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeSecurityGroups", arg0)
+	ret := m.ctrl.Call(m, "DescribeSecurityGroups", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeSecurityGroupsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeSecurityGroups indicates an expected call of DescribeSecurityGroups.
-func (mr *MockClientMockRecorder) DescribeSecurityGroups(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeSecurityGroups(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSecurityGroups", reflect.TypeOf((*MockClient)(nil).DescribeSecurityGroups), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSecurityGroups", reflect.TypeOf((*MockClient)(nil).DescribeSecurityGroups), ctx, input)
 }
 
 // DescribeSubnets mocks base method.
-func (m *MockClient) DescribeSubnets(arg0 *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+func (m *MockClient) DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeSubnets", arg0)
+	ret := m.ctrl.Call(m, "DescribeSubnets", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeSubnetsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeSubnets indicates an expected call of DescribeSubnets.
-func (mr *MockClientMockRecorder) DescribeSubnets(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeSubnets(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockClient)(nil).DescribeSubnets), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockClient)(nil).DescribeSubnets), ctx, input)
 }
 
 // DescribeVolumes mocks base method.
-func (m *MockClient) DescribeVolumes(arg0 *ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error) {
+func (m *MockClient) DescribeVolumes(ctx context.Context, input *ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeVolumes", arg0)
+	ret := m.ctrl.Call(m, "DescribeVolumes", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeVolumesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeVolumes indicates an expected call of DescribeVolumes.
-func (mr *MockClientMockRecorder) DescribeVolumes(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeVolumes(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVolumes", reflect.TypeOf((*MockClient)(nil).DescribeVolumes), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVolumes", reflect.TypeOf((*MockClient)(nil).DescribeVolumes), ctx, input)
 }
 
 // DescribeVpcs mocks base method.
-func (m *MockClient) DescribeVpcs(arg0 *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+func (m *MockClient) DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeVpcs", arg0)
+	ret := m.ctrl.Call(m, "DescribeVpcs", ctx, input)
 	ret0, _ := ret[0].(*ec2.DescribeVpcsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DescribeVpcs indicates an expected call of DescribeVpcs.
-func (mr *MockClientMockRecorder) DescribeVpcs(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DescribeVpcs(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVpcs", reflect.TypeOf((*MockClient)(nil).DescribeVpcs), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVpcs", reflect.TypeOf((*MockClient)(nil).DescribeVpcs), ctx, input)
 }
 
 // ELBv2DeregisterTargets mocks base method.
-func (m *MockClient) ELBv2DeregisterTargets(arg0 *elbv2.DeregisterTargetsInput) (*elbv2.DeregisterTargetsOutput, error) {
+func (m *MockClient) ELBv2DeregisterTargets(ctx context.Context, input *elasticloadbalancingv2.DeregisterTargetsInput) (*elasticloadbalancingv2.DeregisterTargetsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ELBv2DeregisterTargets", arg0)
-	ret0, _ := ret[0].(*elbv2.DeregisterTargetsOutput)
+	ret := m.ctrl.Call(m, "ELBv2DeregisterTargets", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DeregisterTargetsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ELBv2DeregisterTargets indicates an expected call of ELBv2DeregisterTargets.
-func (mr *MockClientMockRecorder) ELBv2DeregisterTargets(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ELBv2DeregisterTargets(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DeregisterTargets", reflect.TypeOf((*MockClient)(nil).ELBv2DeregisterTargets), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DeregisterTargets", reflect.TypeOf((*MockClient)(nil).ELBv2DeregisterTargets), ctx, input)
 }
 
 // ELBv2DescribeLoadBalancers mocks base method.
-func (m *MockClient) ELBv2DescribeLoadBalancers(arg0 *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
+func (m *MockClient) ELBv2DescribeLoadBalancers(ctx context.Context, input *elasticloadbalancingv2.DescribeLoadBalancersInput) (*elasticloadbalancingv2.DescribeLoadBalancersOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ELBv2DescribeLoadBalancers", arg0)
-	ret0, _ := ret[0].(*elbv2.DescribeLoadBalancersOutput)
+	ret := m.ctrl.Call(m, "ELBv2DescribeLoadBalancers", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeLoadBalancersOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ELBv2DescribeLoadBalancers indicates an expected call of ELBv2DescribeLoadBalancers.
-func (mr *MockClientMockRecorder) ELBv2DescribeLoadBalancers(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ELBv2DescribeLoadBalancers(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeLoadBalancers", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeLoadBalancers), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeLoadBalancers", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeLoadBalancers), ctx, input)
 }
 
 // ELBv2DescribeTargetGroups mocks base method.
-func (m *MockClient) ELBv2DescribeTargetGroups(arg0 *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
+func (m *MockClient) ELBv2DescribeTargetGroups(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetGroupsInput) (*elasticloadbalancingv2.DescribeTargetGroupsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ELBv2DescribeTargetGroups", arg0)
-	ret0, _ := ret[0].(*elbv2.DescribeTargetGroupsOutput)
+	ret := m.ctrl.Call(m, "ELBv2DescribeTargetGroups", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeTargetGroupsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ELBv2DescribeTargetGroups indicates an expected call of ELBv2DescribeTargetGroups.
-func (mr *MockClientMockRecorder) ELBv2DescribeTargetGroups(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ELBv2DescribeTargetGroups(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeTargetGroups", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeTargetGroups), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeTargetGroups", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeTargetGroups), ctx, input)
 }
 
 // ELBv2DescribeTargetHealth mocks base method.
-func (m *MockClient) ELBv2DescribeTargetHealth(arg0 *elbv2.DescribeTargetHealthInput) (*elbv2.DescribeTargetHealthOutput, error) {
+func (m *MockClient) ELBv2DescribeTargetHealth(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetHealthInput) (*elasticloadbalancingv2.DescribeTargetHealthOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ELBv2DescribeTargetHealth", arg0)
-	ret0, _ := ret[0].(*elbv2.DescribeTargetHealthOutput)
+	ret := m.ctrl.Call(m, "ELBv2DescribeTargetHealth", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeTargetHealthOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ELBv2DescribeTargetHealth indicates an expected call of ELBv2DescribeTargetHealth.
-func (mr *MockClientMockRecorder) ELBv2DescribeTargetHealth(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ELBv2DescribeTargetHealth(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeTargetHealth", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeTargetHealth), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2DescribeTargetHealth", reflect.TypeOf((*MockClient)(nil).ELBv2DescribeTargetHealth), ctx, input)
 }
 
 // ELBv2RegisterTargets mocks base method.
-func (m *MockClient) ELBv2RegisterTargets(arg0 *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
+func (m *MockClient) ELBv2RegisterTargets(ctx context.Context, input *elasticloadbalancingv2.RegisterTargetsInput) (*elasticloadbalancingv2.RegisterTargetsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ELBv2RegisterTargets", arg0)
-	ret0, _ := ret[0].(*elbv2.RegisterTargetsOutput)
+	ret := m.ctrl.Call(m, "ELBv2RegisterTargets", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.RegisterTargetsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ELBv2RegisterTargets indicates an expected call of ELBv2RegisterTargets.
-func (mr *MockClientMockRecorder) ELBv2RegisterTargets(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ELBv2RegisterTargets(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2RegisterTargets", reflect.TypeOf((*MockClient)(nil).ELBv2RegisterTargets), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ELBv2RegisterTargets", reflect.TypeOf((*MockClient)(nil).ELBv2RegisterTargets), ctx, input)
 }
 
 // RegisterInstancesWithLoadBalancer mocks base method.
-func (m *MockClient) RegisterInstancesWithLoadBalancer(arg0 *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
+func (m *MockClient) RegisterInstancesWithLoadBalancer(ctx context.Context, input *elasticloadbalancing.RegisterInstancesWithLoadBalancerInput) (*elasticloadbalancing.RegisterInstancesWithLoadBalancerOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterInstancesWithLoadBalancer", arg0)
-	ret0, _ := ret[0].(*elb.RegisterInstancesWithLoadBalancerOutput)
+	ret := m.ctrl.Call(m, "RegisterInstancesWithLoadBalancer", ctx, input)
+	ret0, _ := ret[0].(*elasticloadbalancing.RegisterInstancesWithLoadBalancerOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RegisterInstancesWithLoadBalancer indicates an expected call of RegisterInstancesWithLoadBalancer.
-func (mr *MockClientMockRecorder) RegisterInstancesWithLoadBalancer(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RegisterInstancesWithLoadBalancer(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterInstancesWithLoadBalancer", reflect.TypeOf((*MockClient)(nil).RegisterInstancesWithLoadBalancer), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterInstancesWithLoadBalancer", reflect.TypeOf((*MockClient)(nil).RegisterInstancesWithLoadBalancer), ctx, input)
 }
 
 // ReleaseHosts mocks base method.
-func (m *MockClient) ReleaseHosts(arg0 *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+func (m *MockClient) ReleaseHosts(ctx context.Context, input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReleaseHosts", arg0)
+	ret := m.ctrl.Call(m, "ReleaseHosts", ctx, input)
 	ret0, _ := ret[0].(*ec2.ReleaseHostsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReleaseHosts indicates an expected call of ReleaseHosts.
-func (mr *MockClientMockRecorder) ReleaseHosts(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ReleaseHosts(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseHosts", reflect.TypeOf((*MockClient)(nil).ReleaseHosts), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseHosts", reflect.TypeOf((*MockClient)(nil).ReleaseHosts), ctx, input)
 }
 
 // RunInstances mocks base method.
-func (m *MockClient) RunInstances(arg0 *ec2.RunInstancesInput) (*ec2.Reservation, error) {
+func (m *MockClient) RunInstances(ctx context.Context, input *ec2.RunInstancesInput) (*ec2.RunInstancesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunInstances", arg0)
-	ret0, _ := ret[0].(*ec2.Reservation)
+	ret := m.ctrl.Call(m, "RunInstances", ctx, input)
+	ret0, _ := ret[0].(*ec2.RunInstancesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RunInstances indicates an expected call of RunInstances.
-func (mr *MockClientMockRecorder) RunInstances(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) RunInstances(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunInstances", reflect.TypeOf((*MockClient)(nil).RunInstances), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunInstances", reflect.TypeOf((*MockClient)(nil).RunInstances), ctx, input)
 }
 
 // TerminateInstances mocks base method.
-func (m *MockClient) TerminateInstances(arg0 *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
+func (m *MockClient) TerminateInstances(ctx context.Context, input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TerminateInstances", arg0)
+	ret := m.ctrl.Call(m, "TerminateInstances", ctx, input)
 	ret0, _ := ret[0].(*ec2.TerminateInstancesOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TerminateInstances indicates an expected call of TerminateInstances.
-func (mr *MockClientMockRecorder) TerminateInstances(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) TerminateInstances(ctx, input interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateInstances", reflect.TypeOf((*MockClient)(nil).TerminateInstances), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateInstances", reflect.TypeOf((*MockClient)(nil).TerminateInstances), ctx, input)
 }
 
 // MockRegionCache is a mock of RegionCache interface.
@@ -421,16 +422,16 @@ func (m *MockRegionCache) EXPECT() *MockRegionCacheMockRecorder {
 }
 
 // GetCachedDescribeRegions mocks base method.
-func (m *MockRegionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec2.DescribeRegionsOutput, error) {
+func (m *MockRegionCache) GetCachedDescribeRegions(ctx context.Context, cfg aws.Config) (*ec2.DescribeRegionsOutput, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCachedDescribeRegions", awsSession)
+	ret := m.ctrl.Call(m, "GetCachedDescribeRegions", ctx, cfg)
 	ret0, _ := ret[0].(*ec2.DescribeRegionsOutput)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCachedDescribeRegions indicates an expected call of GetCachedDescribeRegions.
-func (mr *MockRegionCacheMockRecorder) GetCachedDescribeRegions(awsSession interface{}) *gomock.Call {
+func (mr *MockRegionCacheMockRecorder) GetCachedDescribeRegions(ctx, cfg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedDescribeRegions", reflect.TypeOf((*MockRegionCache)(nil).GetCachedDescribeRegions), awsSession)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedDescribeRegions", reflect.TypeOf((*MockRegionCache)(nil).GetCachedDescribeRegions), ctx, cfg)
 }

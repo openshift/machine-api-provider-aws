@@ -3,8 +3,8 @@ package machine
 import (
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -19,13 +19,13 @@ func init() {
 func TestExtractNodeAddresses(t *testing.T) {
 	testCases := []struct {
 		testcase          string
-		instance          *ec2.Instance
+		instance          *ec2types.Instance
 		expectedAddresses []corev1.NodeAddress
 		domainNames       []string
 	}{
 		{
 			testcase: "one-public",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PublicIpAddress: aws.String("1.1.1.1"),
 				PublicDnsName:   aws.String("ec2.example.net"),
 			},
@@ -37,12 +37,12 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "one-private",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),
@@ -60,12 +60,12 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "custom-domain",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),
@@ -85,12 +85,12 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "custom-domain that is empty",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),
@@ -109,12 +109,12 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "custom-domain no duplicates",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),
@@ -132,12 +132,12 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "multiple-private",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),
@@ -145,8 +145,8 @@ func TestExtractNodeAddresses(t *testing.T) {
 						},
 					},
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(false),
 								PrivateIpAddress: aws.String("10.0.0.6"),
@@ -165,17 +165,17 @@ func TestExtractNodeAddresses(t *testing.T) {
 		},
 		{
 			testcase: "ipv6-private",
-			instance: &ec2.Instance{
+			instance: &ec2types.Instance{
 				PrivateDnsName: aws.String("ec2.example.net"),
-				NetworkInterfaces: []*ec2.InstanceNetworkInterface{
+				NetworkInterfaces: []ec2types.InstanceNetworkInterface{
 					{
-						Status: aws.String(ec2.NetworkInterfaceStatusInUse),
-						Ipv6Addresses: []*ec2.InstanceIpv6Address{
+						Status: ec2types.NetworkInterfaceStatusInUse,
+						Ipv6Addresses: []ec2types.InstanceIpv6Address{
 							{
 								Ipv6Address: aws.String("2600:1f18:4254:5100:ef8a:7b65:7782:9248"),
 							},
 						},
-						PrivateIpAddresses: []*ec2.InstancePrivateIpAddress{
+						PrivateIpAddresses: []ec2types.InstancePrivateIpAddress{
 							{
 								Primary:          aws.Bool(true),
 								PrivateIpAddress: aws.String("10.0.0.5"),

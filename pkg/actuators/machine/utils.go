@@ -17,6 +17,7 @@ limitations under the License.
 package machine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -24,8 +25,9 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
@@ -41,22 +43,22 @@ const upstreamMachineClusterIDLabel = "sigs.k8s.io/cluster-api-cluster"
 // existingInstanceStates returns the list of states an EC2 instance can be in
 // while being considered "existing"
 // terminated is also handled so that an instance can't get stuck in terminated
-func existingInstanceStates() []*string {
-	return []*string{
-		aws.String(ec2.InstanceStateNameRunning),
-		aws.String(ec2.InstanceStateNamePending),
-		aws.String(ec2.InstanceStateNameStopped),
-		aws.String(ec2.InstanceStateNameStopping),
-		aws.String(ec2.InstanceStateNameShuttingDown),
-		aws.String(ec2.InstanceStateNameTerminated),
+func existingInstanceStates() []string {
+	return []string{
+		string(ec2types.InstanceStateNameRunning),
+		string(ec2types.InstanceStateNamePending),
+		string(ec2types.InstanceStateNameStopped),
+		string(ec2types.InstanceStateNameStopping),
+		string(ec2types.InstanceStateNameShuttingDown),
+		string(ec2types.InstanceStateNameTerminated),
 	}
 }
 
 // getRunningFromInstances returns all running instances from a list of instances.
-func getRunningFromInstances(instances []*ec2.Instance) []*ec2.Instance {
-	var runningInstances []*ec2.Instance
+func getRunningFromInstances(instances []ec2types.Instance) []ec2types.Instance {
+	var runningInstances []ec2types.Instance
 	for _, instance := range instances {
-		if *instance.State.Name == ec2.InstanceStateNameRunning {
+		if instance.State.Name == ec2types.InstanceStateNameRunning {
 			runningInstances = append(runningInstances, instance)
 		}
 	}
@@ -65,21 +67,21 @@ func getRunningFromInstances(instances []*ec2.Instance) []*ec2.Instance {
 
 // getStoppedInstances returns all stopped instances that have a tag matching our machine name,
 // and cluster ID.
-func getStoppedInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
-	stoppedInstanceStateFilter := []*string{aws.String(ec2.InstanceStateNameStopped), aws.String(ec2.InstanceStateNameStopping)}
+func getStoppedInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]ec2types.Instance, error) {
+	stoppedInstanceStateFilter := []string{string(ec2types.InstanceStateNameStopped), string(ec2types.InstanceStateNameStopping)}
 	return getInstances(machine, client, stoppedInstanceStateFilter)
 }
 
 // getExistingInstances returns all instances
-func getExistingInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]*ec2.Instance, error) {
+func getExistingInstances(machine *machinev1beta1.Machine, client awsclient.Client) ([]ec2types.Instance, error) {
 	return getInstances(machine, client, existingInstanceStates())
 }
 
-func getExistingInstanceByID(id string, client awsclient.Client) (*ec2.Instance, error) {
+func getExistingInstanceByID(id string, client awsclient.Client) (ec2types.Instance, error) {
 	return getInstanceByID(id, client, existingInstanceStates())
 }
 
-func instanceHasAllowedState(instance *ec2.Instance, instanceStateFilter []*string) error {
+func instanceHasAllowedState(instance ec2types.Instance, instanceStateFilter []string) error {
 	if instance.InstanceId == nil {
 		return fmt.Errorf("instance has nil ID")
 	}
@@ -92,43 +94,39 @@ func instanceHasAllowedState(instance *ec2.Instance, instanceStateFilter []*stri
 		return nil
 	}
 
-	actualState := aws.StringValue(instance.State.Name)
+	actualState := string(instance.State.Name)
 	for _, allowedState := range instanceStateFilter {
-		if aws.StringValue(allowedState) == actualState {
+		if allowedState == actualState {
 			return nil
 		}
 	}
 
-	allowedStates := make([]string, 0, len(instanceStateFilter))
-	for _, allowedState := range instanceStateFilter {
-		allowedStates = append(allowedStates, aws.StringValue(allowedState))
-	}
-	return fmt.Errorf("instance %s state %q is not in %s", *instance.InstanceId, actualState, strings.Join(allowedStates, ", "))
+	return fmt.Errorf("instance %s state %q is not in %s", *instance.InstanceId, actualState, strings.Join(instanceStateFilter, ", "))
 }
 
 // getInstanceByID returns the instance with the given ID if it exists.
-func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*string) (*ec2.Instance, error) {
+func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []string) (ec2types.Instance, error) {
 	if id == "" {
-		return nil, fmt.Errorf("instance-id not specified")
+		return ec2types.Instance{}, fmt.Errorf("instance-id not specified")
 	}
 
 	request := &ec2.DescribeInstancesInput{
-		InstanceIds: aws.StringSlice([]string{id}),
+		InstanceIds: []string{id},
 	}
 
-	result, err := client.DescribeInstances(request)
+	result, err := client.DescribeInstances(context.TODO(), request)
 	if err != nil {
-		return nil, err
+		return ec2types.Instance{}, err
 	}
 
 	if len(result.Reservations) != 1 {
-		return nil, fmt.Errorf("found %d reservations for instance-id %s", len(result.Reservations), id)
+		return ec2types.Instance{}, fmt.Errorf("found %d reservations for instance-id %s", len(result.Reservations), id)
 	}
 
 	reservation := result.Reservations[0]
 
 	if len(reservation.Instances) != 1 {
-		return nil, fmt.Errorf("found %d instances for instance-id %s", len(reservation.Instances), id)
+		return ec2types.Instance{}, fmt.Errorf("found %d instances for instance-id %s", len(reservation.Instances), id)
 	}
 
 	instance := reservation.Instances[0]
@@ -138,15 +136,15 @@ func getInstanceByID(id string, client awsclient.Client, instanceStateFilter []*
 
 // correctExistingTags validates Name and clusterID tags are correct on the instance
 // and sets them if they are not.
-func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance, client awsclient.Client, rawTags []*ec2.Tag) error {
+func correctExistingTags(machine *machinev1beta1.Machine, instance ec2types.Instance, client awsclient.Client, rawTags []ec2types.Tag) error {
 	tags := make(map[string]string)
 	for _, tag := range rawTags {
-		tags[aws.StringValue(tag.Key)] = aws.StringValue(tag.Value)
+		tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 	}
 
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/ec2/#EC2.CreateTags
-	if instance == nil || instance.InstanceId == nil {
-		return fmt.Errorf("unexpected nil found in instance: %v", instance)
+	if instance.InstanceId == nil {
+		return fmt.Errorf("unexpected nil InstanceId in instance")
 	}
 	clusterID, ok := getClusterID(machine)
 	if !ok {
@@ -168,20 +166,20 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 		}
 	}
 
-	tagsToAdd := []*ec2.Tag{}
+	tagsToAdd := []ec2types.Tag{}
 	for key, value := range tags {
-		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+		tagsToAdd = append(tagsToAdd, ec2types.Tag{
 			Key:   aws.String(key),
 			Value: aws.String(value),
 		})
 	}
 
 	if !nameTagOk || !clusterTagOk {
-		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+		tagsToAdd = append(tagsToAdd, ec2types.Tag{
 			Key:   aws.String("kubernetes.io/cluster/" + clusterID),
 			Value: aws.String("owned"),
 		})
-		tagsToAdd = append(tagsToAdd, &ec2.Tag{
+		tagsToAdd = append(tagsToAdd, ec2types.Tag{
 			Key:   aws.String("Name"),
 			Value: aws.String(machine.Name),
 		})
@@ -190,14 +188,14 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 	if len(tagsToAdd) != 0 {
 		// Create tags only adds/replaces what is present, does not affect other tags.
 		input := &ec2.CreateTagsInput{
-			Resources: []*string{
-				aws.String(*instance.InstanceId),
+			Resources: []string{
+				*instance.InstanceId,
 			},
 			Tags: tagsToAdd,
 		}
 		klog.Infof("updating Tags for machine: %v; instanceID: %v, tags: %+v",
 			machine.Name, *instance.InstanceId, tagsToAdd)
-		_, err := client.CreateTags(input)
+		_, err := client.CreateTags(context.TODO(), input)
 		return err
 	}
 
@@ -206,16 +204,16 @@ func correctExistingTags(machine *machinev1beta1.Machine, instance *ec2.Instance
 
 // getInstances returns all instances that have a tag matching our machine name,
 // and cluster ID.
-func getInstances(machine *machinev1beta1.Machine, client awsclient.Client, instanceStateFilter []*string) ([]*ec2.Instance, error) {
+func getInstances(machine *machinev1beta1.Machine, client awsclient.Client, instanceStateFilter []string) ([]ec2types.Instance, error) {
 	clusterID, ok := getClusterID(machine)
 	if !ok {
-		return []*ec2.Instance{}, fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
+		return []ec2types.Instance{}, fmt.Errorf("unable to get cluster ID for machine: %q", machine.Name)
 	}
 
-	requestFilters := []*ec2.Filter{
+	requestFilters := []ec2types.Filter{
 		{
 			Name:   awsTagFilter("Name"),
-			Values: aws.StringSlice([]string{machine.Name}),
+			Values: []string{machine.Name},
 		},
 		clusterFilter(clusterID),
 	}
@@ -224,12 +222,12 @@ func getInstances(machine *machinev1beta1.Machine, client awsclient.Client, inst
 		Filters: requestFilters,
 	}
 
-	result, err := client.DescribeInstances(request)
+	result, err := client.DescribeInstances(context.TODO(), request)
 	if err != nil {
-		return []*ec2.Instance{}, err
+		return []ec2types.Instance{}, err
 	}
 
-	instances := make([]*ec2.Instance, 0, len(result.Reservations))
+	instances := make([]ec2types.Instance, 0, len(result.Reservations))
 
 	for _, reservation := range result.Reservations {
 		for _, instance := range reservation.Instances {
@@ -246,21 +244,21 @@ func getInstances(machine *machinev1beta1.Machine, client awsclient.Client, inst
 }
 
 // terminateInstances terminates all provided instances with a single EC2 request.
-func terminateInstances(client awsclient.Client, instances []*ec2.Instance) ([]*ec2.InstanceStateChange, error) {
-	instanceIDs := []*string{}
+func terminateInstances(client awsclient.Client, instances []ec2types.Instance) ([]ec2types.InstanceStateChange, error) {
+	instanceIDs := []string{}
 	// Cleanup all older instances:
 	for _, instance := range instances {
-		klog.Infof("Cleaning up extraneous instance for machine: %v, state: %v, launchTime: %v", *instance.InstanceId, *instance.State.Name, *instance.LaunchTime)
-		instanceIDs = append(instanceIDs, instance.InstanceId)
+		klog.Infof("Cleaning up extraneous instance for machine: %v, state: %v, launchTime: %v", *instance.InstanceId, instance.State.Name, *instance.LaunchTime)
+		instanceIDs = append(instanceIDs, *instance.InstanceId)
 	}
 	for _, instanceID := range instanceIDs {
-		klog.Infof("Terminating %v instance", *instanceID)
+		klog.Infof("Terminating %v instance", instanceID)
 	}
 
 	terminateInstancesRequest := &ec2.TerminateInstancesInput{
 		InstanceIds: instanceIDs,
 	}
-	output, err := client.TerminateInstances(terminateInstancesRequest)
+	output, err := client.TerminateInstances(context.TODO(), terminateInstancesRequest)
 	if err != nil {
 		klog.Errorf("Error terminating instances: %v", err)
 		return nil, fmt.Errorf("error terminating instances: %v", err)
@@ -319,7 +317,7 @@ func shouldUpdateCondition(newCondition, existingCondition *metav1.Condition) bo
 }
 
 // extractNodeAddresses maps the instance information from EC2 to an array of NodeAddresses
-func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev1.NodeAddress, error) {
+func extractNodeAddresses(instance *ec2types.Instance, domainNames []string) ([]corev1.NodeAddress, error) {
 	// Not clear if the order matters here, but we might as well indicate a sensible preference order
 
 	if instance == nil {
@@ -331,7 +329,7 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 	// handle internal network interfaces
 	for _, networkInterface := range instance.NetworkInterfaces {
 		// skip network interfaces that are not currently in use
-		if aws.StringValue(networkInterface.Status) != ec2.NetworkInterfaceStatusInUse {
+		if networkInterface.Status != ec2types.NetworkInterfaceStatusInUse {
 			continue
 		}
 
@@ -340,20 +338,20 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 		//
 		// https://github.com/openshift-kni/origin/commit/7db21c1e26a344e25ae1b825d4f21e7bef5c3650
 		for _, ipv6Address := range networkInterface.Ipv6Addresses {
-			if addr := aws.StringValue(ipv6Address.Ipv6Address); addr != "" {
+			if addr := aws.ToString(ipv6Address.Ipv6Address); addr != "" {
 				ip := net.ParseIP(addr)
 				if ip == nil {
-					return nil, fmt.Errorf("EC2 instance had invalid IPv6 address: %s (%q)", aws.StringValue(instance.InstanceId), addr)
+					return nil, fmt.Errorf("EC2 instance had invalid IPv6 address: %s (%q)", aws.ToString(instance.InstanceId), addr)
 				}
 				addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip.String()})
 			}
 		}
 
 		for _, internalIP := range networkInterface.PrivateIpAddresses {
-			if ipAddress := aws.StringValue(internalIP.PrivateIpAddress); ipAddress != "" {
+			if ipAddress := aws.ToString(internalIP.PrivateIpAddress); ipAddress != "" {
 				ip := net.ParseIP(ipAddress)
 				if ip == nil {
-					return nil, fmt.Errorf("EC2 instance had invalid private address: %s (%q)", aws.StringValue(instance.InstanceId), ipAddress)
+					return nil, fmt.Errorf("EC2 instance had invalid private address: %s (%q)", aws.ToString(instance.InstanceId), ipAddress)
 				}
 				addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip.String()})
 			}
@@ -361,16 +359,16 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 	}
 
 	// TODO: Other IP addresses (multiple ips)?
-	publicIPAddress := aws.StringValue(instance.PublicIpAddress)
+	publicIPAddress := aws.ToString(instance.PublicIpAddress)
 	if publicIPAddress != "" {
 		ip := net.ParseIP(publicIPAddress)
 		if ip == nil {
-			return nil, fmt.Errorf("EC2 instance had invalid public address: %s (%s)", aws.StringValue(instance.InstanceId), publicIPAddress)
+			return nil, fmt.Errorf("EC2 instance had invalid public address: %s (%s)", aws.ToString(instance.InstanceId), publicIPAddress)
 		}
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: ip.String()})
 	}
 
-	privateDNSName := aws.StringValue(instance.PrivateDnsName)
+	privateDNSName := aws.ToString(instance.PrivateDnsName)
 	if privateDNSName != "" {
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalDNS, Address: privateDNSName})
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeHostName, Address: privateDNSName})
@@ -385,7 +383,7 @@ func extractNodeAddresses(instance *ec2.Instance, domainNames []string) ([]corev
 		}
 	}
 
-	publicDNSName := aws.StringValue(instance.PublicDnsName)
+	publicDNSName := aws.ToString(instance.PublicDnsName)
 	if publicDNSName != "" {
 		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeExternalDNS, Address: publicDNSName})
 	}

@@ -1,10 +1,12 @@
 package machine
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	"k8s.io/klog/v2"
@@ -19,27 +21,27 @@ const (
 
 // allocateDedicatedHost allocates a new dedicated host for the given instance type in the specified availability zone.
 // It applies any tags specified in the DynamicHostAllocation configuration.
-func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZone string, tags []*ec2.Tag, machineName string) (string, error) {
+func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZone string, tags []ec2types.Tag, machineName string) (string, error) {
 	klog.Infof("Allocating dedicated host for instance type %s in availability zone %s for machine %s", instanceType, availabilityZone, machineName)
 
 	allocateInput := &ec2.AllocateHostsInput{
 		InstanceType:     aws.String(instanceType),
 		AvailabilityZone: aws.String(availabilityZone),
-		Quantity:         aws.Int64(1),
-		AutoPlacement:    aws.String("off"), // Disable auto-placement to ensure 1:1 mapping
+		Quantity:         aws.Int32(1),
+		AutoPlacement:    ec2types.AutoPlacementOff, // Disable auto-placement to ensure 1:1 mapping
 	}
 
 	// Add tags if provided
 	if len(tags) > 0 {
-		var tagSpecs []*ec2.TagSpecification
-		tagSpecs = append(tagSpecs, &ec2.TagSpecification{
-			ResourceType: aws.String("dedicated-host"),
+		var tagSpecs []ec2types.TagSpecification
+		tagSpecs = append(tagSpecs, ec2types.TagSpecification{
+			ResourceType: ec2types.ResourceTypeDedicatedHost,
 			Tags:         tags,
 		})
 		allocateInput.TagSpecifications = tagSpecs
 	}
 
-	output, err := client.AllocateHosts(allocateInput)
+	output, err := client.AllocateHosts(context.TODO(), allocateInput)
 	if err != nil {
 		klog.Errorf("Failed to allocate dedicated host: %v", err)
 		return "", fmt.Errorf("failed to allocate dedicated host: %w", err)
@@ -49,7 +51,7 @@ func allocateDedicatedHost(client awsclient.Client, instanceType, availabilityZo
 		return "", fmt.Errorf("no host IDs returned from AllocateHosts")
 	}
 
-	hostID := aws.StringValue(output.HostIds[0])
+	hostID := output.HostIds[0]
 	klog.Infof("Successfully allocated dedicated host %s for machine %s", hostID, machineName)
 	return hostID, nil
 }
@@ -59,10 +61,10 @@ func releaseDedicatedHost(client awsclient.Client, hostID, machineName string) e
 	klog.Infof("Releasing dedicated host %s for machine %s", hostID, machineName)
 
 	releaseInput := &ec2.ReleaseHostsInput{
-		HostIds: []*string{aws.String(hostID)},
+		HostIds: []string{hostID},
 	}
 
-	output, err := client.ReleaseHosts(releaseInput)
+	output, err := client.ReleaseHosts(context.TODO(), releaseInput)
 	if err != nil {
 		klog.Errorf("Failed to release dedicated host %s: %v", hostID, err)
 		return fmt.Errorf("failed to release dedicated host %s: %w", hostID, err)
@@ -70,8 +72,8 @@ func releaseDedicatedHost(client awsclient.Client, hostID, machineName string) e
 
 	// Check if there were any failures
 	if len(output.Unsuccessful) > 0 {
-		klog.Errorf("Failed to release dedicated host %s: %v", hostID, aws.StringValue(output.Unsuccessful[0].Error.Message))
-		return fmt.Errorf("failed to release dedicated host %s: %s", hostID, aws.StringValue(output.Unsuccessful[0].Error.Message))
+		klog.Errorf("Failed to release dedicated host %s: %v", hostID, aws.ToString(output.Unsuccessful[0].Error.Message))
+		return fmt.Errorf("failed to release dedicated host %s: %s", hostID, aws.ToString(output.Unsuccessful[0].Error.Message))
 	}
 
 	klog.Infof("Successfully released dedicated host %s for machine %s", hostID, machineName)

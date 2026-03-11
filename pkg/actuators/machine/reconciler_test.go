@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/elbv2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
@@ -79,7 +80,7 @@ func TestAvailabilityZone(t *testing.T) {
 				stubSubnetID = "subnet-b46032ec"
 			}
 			stubDescribeAvailabilityZonesOutput := &ec2.DescribeAvailabilityZonesOutput{
-				AvailabilityZones: []*ec2.AvailabilityZone{
+				AvailabilityZones: []ec2types.AvailabilityZone{
 					stubAvailabilityZone(stubAvailabilityzoneName, defaultZoneType),
 				},
 			}
@@ -95,7 +96,7 @@ func TestAvailabilityZone(t *testing.T) {
 			} else {
 				machinePc.Subnet.ID = aws.String(tc.subnet)
 				stubDescribeSubnetsOutput = &ec2.DescribeSubnetsOutput{
-					Subnets: []*ec2.Subnet{
+					Subnets: []ec2types.Subnet{
 						stubSubnet(stubSubnetID, stubAvailabilityzoneName),
 					},
 				}
@@ -131,38 +132,38 @@ func TestAvailabilityZone(t *testing.T) {
 
 			reconciler := newReconciler(machineScope)
 
-			var placement *ec2.Placement
+			var placement *ec2types.Placement
 			if tc.availabilityZone != "" && tc.subnet == "" {
-				placement = &ec2.Placement{AvailabilityZone: aws.String(tc.availabilityZone)}
+				placement = &ec2types.Placement{AvailabilityZone: aws.String(tc.availabilityZone)}
 			}
 
 			instanceID := "i-02fcb933c5da7085c"
-			mockAWSClient.EXPECT().RunInstances(placementMatcher{placement}).Return(
-				&ec2.Reservation{
-					Instances: []*ec2.Instance{
+			mockAWSClient.EXPECT().RunInstances(gomock.Any(), placementMatcher{placement}).Return(
+				&ec2.RunInstancesOutput{
+					Instances: []ec2types.Instance{
 						{
 							ImageId:    aws.String("ami-a9acbbd6"),
 							InstanceId: aws.String(instanceID),
-							State: &ec2.InstanceState{
-								Name: aws.String(ec2.InstanceStateNameRunning),
+							State: &ec2types.InstanceState{
+								Name: ec2types.InstanceStateNameRunning,
 							},
 							LaunchTime: aws.Time(time.Now()),
-							Placement: &ec2.Placement{
+							Placement: &ec2types.Placement{
 								AvailabilityZone: aws.String("us-east-1a"),
 							},
 						},
 					},
 				}, nil).AnyTimes()
 
-			mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"), nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, string(ec2types.InstanceStateNameRunning), "192.168.0.10"), nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
 
-			mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
-			mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).AnyTimes()
-			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput, nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput, nil).AnyTimes()
-			mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
-			mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
+			mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
+			mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any(), gomock.Any()).AnyTimes()
+			mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any(), gomock.Any()).Return(stubDescribeAvailabilityZonesOutput, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(stubDescribeSubnetsOutput, nil).AnyTimes()
+			mockAWSClient.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
+			mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any(), gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
 
 			err = reconciler.create()
 			if tc.expectedError != nil {
@@ -182,7 +183,7 @@ func TestAvailabilityZone(t *testing.T) {
 }
 
 type placementMatcher struct {
-	placement *ec2.Placement
+	placement *ec2types.Placement
 }
 
 func (m placementMatcher) Matches(input interface{}) bool {
@@ -190,8 +191,11 @@ func (m placementMatcher) Matches(input interface{}) bool {
 	if !ok {
 		return false
 	}
-	if runInstancesInput.Placement == m.placement {
+	if m.placement == nil && runInstancesInput.Placement == nil {
 		return true
+	}
+	if m.placement != nil && runInstancesInput.Placement != nil {
+		return aws.ToString(m.placement.AvailabilityZone) == aws.ToString(runInstancesInput.Placement.AvailabilityZone)
 	}
 	return false
 }
@@ -205,21 +209,21 @@ func TestCreate(t *testing.T) {
 	instanceID := "i-02fcb933c5da7085c"
 	mockCtrl := gomock.NewController(t)
 	mockAWSClient := mockaws.NewMockClient(mockCtrl)
-	mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any()).Return(nil, fmt.Errorf("describeSecurityGroups error")).AnyTimes()
-	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
-	mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(nil, fmt.Errorf("describeImages error")).AnyTimes()
-	mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"), nil).AnyTimes()
-	mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
-	mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
-	mockAWSClient.EXPECT().RunInstances(gomock.Any()).Return(stubReservation("ami-a9acbbd6", instanceID, "192.168.0.10"), nil).AnyTimes()
-	mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).Return(nil, nil).AnyTimes()
-	mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
-	mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
-	mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
-	mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, nil).AnyTimes()
-	mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
-	mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
-	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("describeSecurityGroups error")).AnyTimes()
+	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any(), gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeImages(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("describeImages error")).AnyTimes()
+	mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), stubDescribeInstancesInput(instanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", instanceID, string(ec2types.InstanceStateNameRunning), "192.168.0.10"), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().RunInstances(gomock.Any(), gomock.Any()).Return(stubReservation("ami-a9acbbd6", instanceID, "192.168.0.10"), nil).AnyTimes()
+	mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any(), gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
+	mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any(), gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
 
 	testCases := []struct {
 		testcase             string
@@ -590,7 +594,7 @@ func TestExists(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -614,7 +618,7 @@ func TestExists(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -633,7 +637,7 @@ func TestExists(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -652,7 +656,7 @@ func TestExists(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameTerminated, "1.1.1.1"), nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameTerminated), "1.1.1.1"), nil).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -734,14 +738,14 @@ func TestUpdate(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).AnyTimes()
-				mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, nil).AnyTimes()
-				mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
-				mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).AnyTimes()
+				mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any(), gomock.Any()).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+				mockAWSClient.EXPECT().CreateTags(gomock.Any(), gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any(), gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -764,13 +768,13 @@ func TestUpdate(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
-				mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
-				mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, nil).AnyTimes()
-				mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
-				mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+				mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any(), gomock.Any()).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
+				mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+				mockAWSClient.EXPECT().CreateTags(gomock.Any(), gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
+				mockAWSClient.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
 				return mockAWSClient
 			},
 		},
@@ -844,7 +848,7 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).Times(1)
 				return mockAWSClient
 			},
 		},
@@ -862,11 +866,11 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DeregisterTargets(stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
-				mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any(), stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
 				return mockAWSClient
 			},
 		},
@@ -884,13 +888,13 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any()).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
-				mockAWSClient.EXPECT().TerminateInstances(&ec2.TerminateInstancesInput{
-					InstanceIds: []*string{
-						aws.String("test-id"),
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any(), gomock.Any()).Return(&elbv2.DeregisterTargetsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), &ec2.TerminateInstancesInput{
+					InstanceIds: []string{
+						"test-id",
 					},
 				}).Return(&ec2.TerminateInstancesOutput{}, nil).AnyTimes()
 				return mockAWSClient
@@ -910,10 +914,10 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DeregisterTargets(stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, errors.New("unauthorized")).Times(1)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any(), stubDeregisterTargetsInput("1.1.1.1")).Return(&elbv2.DeregisterTargetsOutput{}, errors.New("unauthorized")).Times(1)
 				return mockAWSClient
 			},
 		},
@@ -931,10 +935,10 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameRunning, "1.1.1.1"), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
-				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(&elbv2.DescribeTargetGroupsOutput{}, nil).Times(1)
-				mockAWSClient.EXPECT().TerminateInstances(gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameRunning), "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).Times(1)
+				mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(&elbv2.DescribeTargetGroupsOutput{}, nil).Times(1)
+				mockAWSClient.EXPECT().TerminateInstances(gomock.Any(), gomock.Any()).Return(&ec2.TerminateInstancesOutput{}, nil).Times(1)
 				return mockAWSClient
 			},
 		},
@@ -952,7 +956,7 @@ func TestDelete(t *testing.T) {
 			awsClient: func(ctrl *gomock.Controller) awsclient.Client {
 				mockCtrl := gomock.NewController(t)
 				mockAWSClient := mockaws.NewMockClient(mockCtrl)
-				mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", ec2.InstanceStateNameTerminated, "1.1.1.1"), nil).Times(1)
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), gomock.Any()).Return(stubDescribeInstancesOutput("test-ami", "test-id", string(ec2types.InstanceStateNameTerminated), "1.1.1.1"), nil).Times(1)
 				return mockAWSClient
 			},
 		},
@@ -1013,18 +1017,18 @@ func TestGetMachineInstances(t *testing.T) {
 				mockAWSClient := mockaws.NewMockClient(ctrl)
 
 				request := &ec2.DescribeInstancesInput{
-					Filters: []*ec2.Filter{
+					Filters: []ec2types.Filter{
 						{
 							Name:   awsTagFilter("Name"),
-							Values: aws.StringSlice([]string{machine.Name}),
+							Values: []string{machine.Name},
 						},
 
 						clusterFilter(clusterID),
 					},
 				}
 
-				mockAWSClient.EXPECT().DescribeInstances(request).Return(
-					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"),
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), request).Return(
+					stubDescribeInstancesOutput(imageID, instanceID, string(ec2types.InstanceStateNameRunning), "192.168.0.10"),
 					nil,
 				).Times(1)
 
@@ -1041,11 +1045,11 @@ func TestGetMachineInstances(t *testing.T) {
 				mockAWSClient := mockaws.NewMockClient(ctrl)
 
 				request := &ec2.DescribeInstancesInput{
-					InstanceIds: aws.StringSlice([]string{instanceID}),
+					InstanceIds: []string{instanceID},
 				}
 
-				mockAWSClient.EXPECT().DescribeInstances(request).Return(
-					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameRunning, "192.168.0.10"),
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), request).Return(
+					stubDescribeInstancesOutput(imageID, instanceID, string(ec2types.InstanceStateNameRunning), "192.168.0.10"),
 					nil,
 				).Times(1)
 
@@ -1061,10 +1065,10 @@ func TestGetMachineInstances(t *testing.T) {
 			awsClientFunc: func(ctrl *gomock.Controller) awsclient.Client {
 				mockAWSClient := mockaws.NewMockClient(ctrl)
 
-				mockAWSClient.EXPECT().DescribeInstances(&ec2.DescribeInstancesInput{
-					InstanceIds: aws.StringSlice([]string{instanceID}),
+				mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), &ec2.DescribeInstancesInput{
+					InstanceIds: []string{instanceID},
 				}).Return(
-					stubDescribeInstancesOutput(imageID, instanceID, ec2.InstanceStateNameTerminated, "192.168.0.10"),
+					stubDescribeInstancesOutput(imageID, instanceID, string(ec2types.InstanceStateNameTerminated), "192.168.0.10"),
 					nil,
 				).Times(1)
 

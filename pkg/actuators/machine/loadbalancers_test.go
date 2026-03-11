@@ -4,12 +4,23 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/elbv2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/aws/smithy-go"
 	"github.com/golang/mock/gomock"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 )
+
+// testAPIError implements smithy.APIError for testing
+type testAPIError struct {
+	code    string
+	message string
+}
+
+func (e *testAPIError) Error() string              { return e.message }
+func (e *testAPIError) ErrorCode() string           { return e.code }
+func (e *testAPIError) ErrorMessage() string        { return e.message }
+func (e *testAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultUnknown }
 
 func TestRegisterWithNetworkLoadBalancers(t *testing.T) {
 	cases := []struct {
@@ -42,10 +53,10 @@ func TestRegisterWithNetworkLoadBalancers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
-			mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), tc.lbErr)
-			mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), tc.targetGroupErr).AnyTimes()
-			mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, tc.registerTargetErr).AnyTimes()
-			mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any()).Return(&elbv2.DescribeTargetHealthOutput{}, nil).AnyTimes()
+			mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), tc.lbErr)
+			mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), tc.targetGroupErr).AnyTimes()
+			mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any(), gomock.Any()).Return(nil, tc.registerTargetErr).AnyTimes()
+			mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any(), gomock.Any()).Return(&elbv2.DescribeTargetHealthOutput{}, nil).AnyTimes()
 			registerWithNetworkLoadBalancers(mockAWSClient, []string{"name1", "name2"}, instance)
 		})
 	}
@@ -54,7 +65,7 @@ func TestRegisterWithNetworkLoadBalancers(t *testing.T) {
 func TestDeregisterNetworkLoadBalancers(t *testing.T) {
 	cases := []struct {
 		name                           string
-		instance                       *ec2.Instance
+		instance                       ec2types.Instance
 		lbErr                          error
 		describeLoadBalancersCallTimes int
 		targetGroupErr                 error
@@ -95,7 +106,7 @@ func TestDeregisterNetworkLoadBalancers(t *testing.T) {
 		{
 			name:                           "With target already unregistered error",
 			instance:                       stubInstance("ami-a9acbbd6", "i-02fcb933c5da7085c", true),
-			unregisterTargetErr:            awserr.New(elbv2.ErrCodeTargetGroupNotFoundException, "error", nil),
+			unregisterTargetErr:            &testAPIError{code: "TargetGroupNotFound", message: "error"},
 			describeLoadBalancersCallTimes: 1,
 			describeTargetGroupsCallTimes:  1,
 			deregisterCallTimes:            1,
@@ -116,9 +127,9 @@ func TestDeregisterNetworkLoadBalancers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
 			mockAWSClient := mockaws.NewMockClient(mockCtrl)
-			mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), tc.lbErr).Times(tc.describeLoadBalancersCallTimes)
-			mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), tc.targetGroupErr).Times(tc.describeTargetGroupsCallTimes)
-			mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any()).Return(nil, tc.unregisterTargetErr).Times(tc.deregisterCallTimes)
+			mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), tc.lbErr).Times(tc.describeLoadBalancersCallTimes)
+			mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), tc.targetGroupErr).Times(tc.describeTargetGroupsCallTimes)
+			mockAWSClient.EXPECT().ELBv2DeregisterTargets(gomock.Any(), gomock.Any()).Return(nil, tc.unregisterTargetErr).Times(tc.deregisterCallTimes)
 			err := deregisterNetworkLoadBalancers(mockAWSClient, []string{"name1", "name2"}, tc.instance)
 			mockCtrl.Finish()
 

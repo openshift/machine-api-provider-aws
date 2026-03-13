@@ -26,8 +26,8 @@ if [ -n "$TRACE" ]; then
   set -x
 fi
 
-k8s_version=1.25.0
-goarch=amd64
+k8s_version=1.28.0
+goarch=$(go env GOARCH)
 goos="unknown"
 
 if [[ "$OSTYPE" == "linux"* ]]; then
@@ -91,32 +91,34 @@ function fetch_tools {
     return 0
   fi
 
-  header_text "fetching tools"
-  kb_tools_archive_name="kubebuilder-tools-$k8s_version-$goos-$goarch.tar.gz"
-  kb_tools_download_url="https://storage.googleapis.com/kubebuilder-tools/$kb_tools_archive_name"
-
-  kb_tools_archive_path="$tmp_root/$kb_tools_archive_name"
-  if [ ! -f $kb_tools_archive_path ]; then
-    curl -fsL ${kb_tools_download_url} -o "$kb_tools_archive_path"
+  local envtest_assets_dir="/tmp/controller-tools/envtest"
+  if [ -f "${envtest_assets_dir}/kube-apiserver" ]; then
+    return 0
   fi
 
-  tar -zvxf "$kb_tools_archive_path" -C "$tmp_root/"
+  header_text "fetching tools"
+  local kb_tools_archive_path="$tmp_root/envtest.tar.gz"
+  local kb_tools_download_url="https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v${k8s_version}/envtest-v${k8s_version}-${goos}-${goarch}.tar.gz"
+
+  curl -fSL "${kb_tools_download_url}" -o "${kb_tools_archive_path}"
+  tar -xzf "${kb_tools_archive_path}" -C "$tmp_root/"
 }
 
 function setup_envs {
   header_text "setting up env vars"
 
+  local envtest_assets_dir="/tmp/controller-tools/envtest"
   # Setup env vars
-  export PATH=/tmp/kubebuilder/bin:$PATH
-  export TEST_ASSET_KUBECTL=/tmp/kubebuilder/bin/kubectl
-  export TEST_ASSET_KUBE_APISERVER=/tmp/kubebuilder/bin/kube-apiserver
-  export TEST_ASSET_ETCD=/tmp/kubebuilder/bin/etcd
+  export PATH=${envtest_assets_dir}:$PATH
+  export TEST_ASSET_KUBECTL=${envtest_assets_dir}/kubectl
+  export TEST_ASSET_KUBE_APISERVER=${envtest_assets_dir}/kube-apiserver
+  export TEST_ASSET_ETCD=${envtest_assets_dir}/etcd
   export KUBEBUILDER_CONTROLPLANE_START_TIMEOUT=10m
   export NO_DOCKER=1
 
   # Ensure that some home var is set and that it's not the root
   export HOME=${HOME:=/tmp/kubebuilder-testing}
-  if [ $HOME == "/" ]; then
+  if [ "$HOME" == "/" ]; then
     export HOME=/tmp/kubebuilder-testing
   fi
 }

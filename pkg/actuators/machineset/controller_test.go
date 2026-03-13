@@ -29,6 +29,7 @@ import (
 	"github.com/openshift/library-go/pkg/features"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	fakeawsclient "github.com/openshift/machine-api-provider-aws/pkg/client/fake"
+	"github.com/openshift/machine-api-provider-aws/pkg/version"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -484,8 +485,14 @@ func providerSpecFromMachine(in *machinev1beta1.AWSMachineProviderConfig) (machi
 }
 
 func newDefaultMutableFeatureGate() (featuregate.MutableFeatureGate, error) {
+	// Sets up feature gates (version from build time, default 4 for unknown)
+	// Default should be changed to 5 once we branch for 5
+	majorVersion := version.Version.Major
+	if majorVersion == 0 {
+		majorVersion = 4
+	}
 	defaultMutableGate := feature.DefaultMutableFeatureGate
-	if _, err := features.NewFeatureGateOptions(defaultMutableGate, openshiftfeatures.SelfManaged,
+	if _, err := features.NewFeatureGateOptions(defaultMutableGate, majorVersion, openshiftfeatures.SelfManaged,
 		openshiftfeatures.FeatureGateMachineAPIMigration); err != nil {
 		return nil, fmt.Errorf("failed to set up default feature gate: %w", err)
 	}

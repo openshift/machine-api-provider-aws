@@ -492,6 +492,17 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 		}
 		return nil, "", err
 	}
+
+	// Tag BYO dedicated host with kubernetes.io/cluster/<cluster-id>=shared
+	if isBYODedicatedHost(&machineProviderConfig.Placement) {
+		byoHostID := getDedicatedHostID(&machineProviderConfig.Placement)
+		if err := tagBYODedicatedHost(awsClient, byoHostID, clusterID, machine.Name); err != nil {
+			// Log the error but don't fail the instance creation since tagging is not critical
+			// and the user owns the host
+			klog.Warningf("Failed to tag BYO dedicated host %s: %v", byoHostID, err)
+		}
+	}
+
 	capacityReservationSpecification, err := getCapacityReservationSpecification(machineProviderConfig.CapacityReservationID)
 
 	if err != nil {

@@ -140,3 +140,49 @@ func clearAllocatedHostIDInStatus(providerStatus *machinev1beta1.AWSMachineProvi
 		providerStatus.DedicatedHost.ID = ""
 	}
 }
+
+// tagBYODedicatedHost tags a BYO (Bring Your Own) dedicated host with kubernetes.io/cluster/<cluster-id>=shared.
+func tagBYODedicatedHost(client awsclient.Client, hostID, clusterID, machineName string) error {
+	klog.Infof("Tagging BYO dedicated host %s with kubernetes.io/cluster/%s=shared for machine %s", hostID, clusterID, machineName)
+
+	tags := []*ec2.Tag{
+		{
+			Key:   aws.String("kubernetes.io/cluster/" + clusterID),
+			Value: aws.String("shared"),
+		},
+	}
+
+	input := &ec2.CreateTagsInput{
+		Resources: []*string{aws.String(hostID)},
+		Tags:      tags,
+	}
+
+	_, err := client.CreateTags(input)
+	if err != nil {
+		klog.Errorf("Failed to tag BYO dedicated host %s: %v", hostID, err)
+		return fmt.Errorf("failed to tag BYO dedicated host %s: %w", hostID, err)
+	}
+
+	klog.Infof("Successfully tagged BYO dedicated host %s for machine %s", hostID, machineName)
+	return nil
+}
+
+// isBYODedicatedHost checks if a placement configuration uses a BYO dedicated host.
+func isBYODedicatedHost(placement *machinev1beta1.Placement) bool {
+	if placement == nil || placement.Host == nil || placement.Host.DedicatedHost == nil {
+		return false
+	}
+
+	// BYO if AllocationStrategy is nil (default is UserProvided) or explicitly set to UserProvided
+	// and a host ID is provided
+	if placement.Host.DedicatedHost.ID == "" {
+		return false
+	}
+
+	if placement.Host.DedicatedHost.AllocationStrategy == nil ||
+		*placement.Host.DedicatedHost.AllocationStrategy == AllocationStrategyUserProvided {
+		return true
+	}
+
+	return false
+}

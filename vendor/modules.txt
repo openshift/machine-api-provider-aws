@@ -252,7 +252,7 @@ github.com/openshift/api/machine/v1
 github.com/openshift/api/machine/v1/zz_generated.crd-manifests
 github.com/openshift/api/machine/v1beta1
 github.com/openshift/api/machine/v1beta1/zz_generated.crd-manifests
-# github.com/openshift/client-go v0.0.0-20260302182750-20813ce71ca6
+# github.com/openshift/client-go v0.0.0-20260305144912-aba4b273812d
 ## explicit; go 1.25.0
 github.com/openshift/client-go/config/applyconfigurations/config/v1
 github.com/openshift/client-go/config/applyconfigurations/internal
@@ -273,13 +273,14 @@ github.com/openshift/client-go/machine/listers/machine/v1beta1
 github.com/openshift/library-go/pkg/config/clusterstatus
 github.com/openshift/library-go/pkg/config/leaderelection
 github.com/openshift/library-go/pkg/features
-# github.com/openshift/machine-api-operator v0.2.1-0.20251110092458-e0af0f3f44b8
-## explicit; go 1.24.0
+# github.com/openshift/machine-api-operator v0.2.1-0.20260320085232-221c405ba014
+## explicit; go 1.25.0
 github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics
 github.com/openshift/machine-api-operator/pkg/util
 github.com/openshift/machine-api-operator/pkg/util/conditions
 github.com/openshift/machine-api-operator/pkg/util/testing
+github.com/openshift/machine-api-operator/pkg/version
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 ## explicit
 github.com/peterbourgon/diskv

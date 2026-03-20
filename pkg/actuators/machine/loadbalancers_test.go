@@ -7,8 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/golang/mock/gomock"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
+	"go.uber.org/mock/gomock"
 )
 
 func TestRegisterWithNetworkLoadBalancers(t *testing.T) {

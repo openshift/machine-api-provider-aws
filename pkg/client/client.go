@@ -48,7 +48,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-//go:generate go run ../../vendor/github.com/golang/mock/mockgen -source=./client.go -destination=./mock/client_generated.go -package=mock
+//go:generate go run ../../vendor/go.uber.org/mock/mockgen -source=./client.go -destination=./mock/client_generated.go -package=mock
 
 const (
 	// AwsCredsSecretIDKey is secret key containing AWS KeyId

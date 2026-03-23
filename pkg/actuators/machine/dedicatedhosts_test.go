@@ -346,3 +346,124 @@ func TestClearAllocatedHostIDInStatus(t *testing.T) {
 		t.Errorf("expected host ID to be empty, got %q", providerStatus.DedicatedHost.ID)
 	}
 }
+
+func TestIsBYODedicatedHost(t *testing.T) {
+	tests := []struct {
+		name      string
+		placement *machinev1beta1.Placement
+		expected  bool
+	}{
+		{
+			name:      "nil placement",
+			placement: nil,
+			expected:  false,
+		},
+		{
+			name:      "nil host",
+			placement: &machinev1beta1.Placement{},
+			expected:  false,
+		},
+		{
+			name: "nil dedicated host",
+			placement: &machinev1beta1.Placement{
+				Host: &machinev1beta1.HostPlacement{},
+			},
+			expected: false,
+		},
+		{
+			name: "empty host ID",
+			placement: &machinev1beta1.Placement{
+				Host: &machinev1beta1.HostPlacement{
+					DedicatedHost: &machinev1beta1.DedicatedHost{
+						ID:                 "",
+						AllocationStrategy: ptr.To(AllocationStrategyUserProvided),
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "user provided with ID",
+			placement: &machinev1beta1.Placement{
+				Host: &machinev1beta1.HostPlacement{
+					DedicatedHost: &machinev1beta1.DedicatedHost{
+						ID:                 "h-1234567890abcdef0",
+						AllocationStrategy: ptr.To(AllocationStrategyUserProvided),
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "nil allocation strategy defaults to UserProvided with ID",
+			placement: &machinev1beta1.Placement{
+				Host: &machinev1beta1.HostPlacement{
+					DedicatedHost: &machinev1beta1.DedicatedHost{
+						ID: "h-1234567890abcdef0",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "dynamic allocation is not BYO",
+			placement: &machinev1beta1.Placement{
+				Host: &machinev1beta1.HostPlacement{
+					DedicatedHost: &machinev1beta1.DedicatedHost{
+						ID:                 "h-1234567890abcdef0",
+						AllocationStrategy: ptr.To(AllocationStrategyDynamic),
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isBYODedicatedHost(tc.placement)
+			if result != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestTagBYODedicatedHost(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	mockAWSClient := mock.NewMockClient(mockCtrl)
+
+	hostID := "h-1234567890abcdef0"
+	clusterID := "test-cluster-id"
+	machineName := "test-machine"
+
+	mockAWSClient.EXPECT().CreateTags(gomock.Any()).DoAndReturn(func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+		// Verify the host ID
+		if len(input.Resources) != 1 || *input.Resources[0] != hostID {
+			t.Errorf("expected host ID %s, got %v", hostID, input.Resources)
+		}
+
+		// Verify the tag
+		if len(input.Tags) != 1 {
+			t.Errorf("expected 1 tag, got %d", len(input.Tags))
+		} else {
+			expectedKey := "kubernetes.io/cluster/" + clusterID
+			expectedValue := "shared"
+			if *input.Tags[0].Key != expectedKey {
+				t.Errorf("expected tag key %s, got %s", expectedKey, *input.Tags[0].Key)
+			}
+			if *input.Tags[0].Value != expectedValue {
+				t.Errorf("expected tag value %s, got %s", expectedValue, *input.Tags[0].Value)
+			}
+		}
+
+		return &ec2.CreateTagsOutput{}, nil
+	})
+
+	err := tagBYODedicatedHost(mockAWSClient, hostID, clusterID, machineName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

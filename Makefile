@@ -87,11 +87,23 @@ bin:
 	@mkdir $@
 
 .PHONY: build
-build: ## build binaries
+build: machine-controller-manager terminal-handler machine-api-provider-aws-tests-ext## build binaries
+
+.PHONY: machine-controller-manager
+machine-controller-manager:
 	$(DOCKER_CMD) go build $(GOGCFLAGS) -o "bin/machine-controller-manager" \
                -ldflags "$(LD_FLAGS)" "$(REPO_PATH)/cmd/manager"
+
+.PHONY: terminal-handler
+terminal-handler:
 	$(DOCKER_CMD) go build  $(GOGCFLAGS) -o "bin/termination-handler" \
 	             -ldflags "$(LD_FLAGS)" "$(REPO_PATH)/cmd/termination-handler"
+
+.PHONY:machine-api-provider-aws-tests-ext
+machine-api-provider-aws-tests-ext:
+	pushd openshift-tests && \
+	$(DOCKER_CMD) go build  $(GOGCFLAGS) -o "bin/machine-api-provider-aws-tests-ext" \
+	             -ldflags "$(LD_FLAGS)" "$(REPO_PATH)/openshift-tests/cmd/mapa-tests"
 
 .PHONY: images
 images: ## Create images

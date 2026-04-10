@@ -81,7 +81,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 		AfterEach(func() {
 			// Restore original machineset replicas
 			for name, replicas := range originalReplicas {
-				By(fmt.Sprintf("Restoring machineset %s to %d replicas", name, replicas))
+				By("Restoring machineset to original replicas")
+				GinkgoWriter.Printf("Restoring machineset %s to %d replicas\n", name, replicas)
 				err := machineutil.ScaleMachineSet(kubeConfig, name, int(replicas))
 				if err != nil {
 					GinkgoWriter.Printf("Warning: Failed to restore machineset %s: %v\n", name, err)
@@ -89,7 +90,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				}
 
 				// Wait for machines to reach expected count
-				By(fmt.Sprintf("Waiting for machineset %s to have %d running machines", name, replicas))
+				By("Waiting for machineset to have expected running machines")
+				GinkgoWriter.Printf("Waiting for machineset %s to have %d running machines\n", name, replicas)
 				Eventually(func() (int, error) {
 					return countRunningMachinesInMachineSet(ctx, kubeConfig, name)
 				}, defaultTestTimeout, defaultPollingInterval).Should(Equal(int(replicas)))
@@ -104,7 +106,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				}
 
 				// Wait for old node objects to be removed (verify only expected nodes exist)
-				By(fmt.Sprintf("Waiting for old nodes to be removed for machineset %s", name))
+				By("Waiting for old nodes to be removed")
+				GinkgoWriter.Printf("Waiting for old nodes to be removed for machineset %s\n", name)
 				Eventually(func() bool {
 					currentMachines := getMachinesInMachineSet(kubeConfig, name)
 					currentNodeNames := make(map[string]bool)
@@ -150,7 +153,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			// Ensure all current machines are running before scaling up
 			waitForMachinesFullyRunning(kubeConfig, targetMS.Name, currentReplicas, defaultTestTimeout)
 
-			By(fmt.Sprintf("Scaling machineset %s from %d to %d replicas", targetMS.Name, currentReplicas, targetReplicas))
+			By("Scaling machineset up")
+			GinkgoWriter.Printf("Scaling machineset %s from %d to %d replicas\n", targetMS.Name, currentReplicas, targetReplicas)
 			err = machineutil.ScaleMachineSet(kubeConfig, targetMS.Name, targetReplicas)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -179,7 +183,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				}
 
 				instanceID := *providerStatus.InstanceID
-				By(fmt.Sprintf("Verifying instance %s is on a dedicated host", instanceID))
+				By("Verifying instance is on a dedicated host")
+				GinkgoWriter.Printf("Verifying instance %s is on a dedicated host\n", instanceID)
 
 				hostID, err := getInstanceHostID(ctx, ec2Client, instanceID)
 				Expect(err).NotTo(HaveOccurred())
@@ -227,7 +232,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				}
 			}
 
-			By(fmt.Sprintf("Scaling down machineset %s from %d to %d replicas", targetMS.Name, currentReplicas, targetReplicas))
+			By("Scaling down machineset")
+			GinkgoWriter.Printf("Scaling down machineset %s from %d to %d replicas\n", targetMS.Name, currentReplicas, targetReplicas)
 			err = machineutil.ScaleMachineSet(kubeConfig, targetMS.Name, targetReplicas)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -270,18 +276,19 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				Skip("No machineset with user-provided dedicated host found")
 			}
 
-			By(fmt.Sprintf("Checking available capacity on dedicated host %s", hostID))
+			By("Checking available capacity on dedicated host")
+			GinkgoWriter.Printf("Checking available capacity on dedicated host %s\n", hostID)
 			availableCapacity, err := getDedicatedHostAvailableCapacity(ctx, ec2Client, hostID)
 			Expect(err).NotTo(HaveOccurred())
 
-			By(fmt.Sprintf("Dedicated host %s has %d available instance capacity", hostID, availableCapacity))
+			GinkgoWriter.Printf("Dedicated host %s has %d available instance capacity\n", hostID, availableCapacity)
 
 			// Get instance type from machineset
 			providerSpec, err := machine.ProviderSpecFromRawExtension(targetMS.Spec.Template.Spec.ProviderSpec.Value)
 			Expect(err).NotTo(HaveOccurred())
 			instanceType := providerSpec.InstanceType
 
-			By(fmt.Sprintf("Machineset uses instance type: %s", instanceType))
+			GinkgoWriter.Printf("Machineset uses instance type: %s\n", instanceType)
 
 			originalReplicas[targetMS.Name] = *targetMS.Spec.Replicas
 			currentReplicas := int(*targetMS.Spec.Replicas)
@@ -292,7 +299,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				waitForMachinesFullyRunning(kubeConfig, targetMS.Name, currentReplicas, defaultTestTimeout)
 
 				targetReplicas := currentReplicas + 1
-				By(fmt.Sprintf("Scaling machineset %s from %d to %d replicas", targetMS.Name, currentReplicas, targetReplicas))
+				By("Scaling machineset up to test capacity tracking")
+				GinkgoWriter.Printf("Scaling machineset %s from %d to %d replicas\n", targetMS.Name, currentReplicas, targetReplicas)
 				err = machineutil.ScaleMachineSet(kubeConfig, targetMS.Name, targetReplicas)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -309,7 +317,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				// Ensure all machines are fully running before finishing
 				waitForMachinesFullyRunning(kubeConfig, targetMS.Name, targetReplicas, defaultTestTimeout)
 			} else {
-				By(fmt.Sprintf("Skipping scale-up test: dedicated host %s has no available capacity", hostID))
+				By("Skipping scale-up test: no available capacity")
+				GinkgoWriter.Printf("Skipping scale-up test: dedicated host %s has no available capacity\n", hostID)
 			}
 		})
 	})
@@ -321,7 +330,7 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				Skip("No machineset with user-provided dedicated host found")
 			}
 
-			By(fmt.Sprintf("Using dedicated host ID %s from machineset %s", hostID, templateMS.Name))
+			GinkgoWriter.Printf("Using dedicated host ID %s from machineset %s\n", hostID, templateMS.Name)
 
 			// Get the provider spec from the template
 			templateProviderSpec, err := machine.ProviderSpecFromRawExtension(templateMS.Spec.Template.Spec.ProviderSpec.Value)
@@ -371,7 +380,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				},
 			}
 
-			By(fmt.Sprintf("Creating machine %s with BYO dedicated host %s", machineName, hostID))
+			By("Creating machine with BYO dedicated host")
+			GinkgoWriter.Printf("Creating machine %s with BYO dedicated host %s\n", machineName, hostID)
 			client, err := machineclient.NewForConfig(kubeConfig)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -387,7 +397,7 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			By("Waiting for machine to have a running instance")
 			instanceID := waitForMachineInstanceID(ctx, client, machineName)
 
-			By(fmt.Sprintf("Machine created with instance ID: %s", instanceID))
+			GinkgoWriter.Printf("Machine created with instance ID: %s\n", instanceID)
 
 			By("Verifying instance is running on the specified dedicated host")
 			actualHostID, err := getInstanceHostID(ctx, ec2Client, instanceID)
@@ -469,7 +479,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 				},
 			}
 
-			By(fmt.Sprintf("Creating machine %s with dynamic dedicated host allocation", machineName))
+			By("Creating machine with dynamic dedicated host allocation")
+			GinkgoWriter.Printf("Creating machine %s with dynamic dedicated host allocation\n", machineName)
 			client, err := machineclient.NewForConfig(kubeConfig)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -487,11 +498,11 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			By("Waiting for machine to have a running instance")
 			instanceID := waitForMachineInstanceID(ctx, client, machineName)
 
-			By(fmt.Sprintf("Machine created with instance ID: %s", instanceID))
+			GinkgoWriter.Printf("Machine created with instance ID: %s\n", instanceID)
 
 			By("Verifying the machine status has dedicated host ID populated")
 			dynamicHostID = waitForMachineDedicatedHostID(ctx, client, machineName, "")
-			By(fmt.Sprintf("Dynamic dedicated host allocated with ID: %s", dynamicHostID))
+			GinkgoWriter.Printf("Dynamic dedicated host allocated with ID: %s\n", dynamicHostID)
 			Expect(dynamicHostID).To(MatchRegexp("^h-([0-9a-f]{8}|[0-9a-f]{17})$"), "host ID should match expected format")
 
 			By("Verifying instance is running on the dynamically allocated host")
@@ -524,7 +535,8 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			// Manually trigger cleanup before verifying host release
 			cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
 
-			By(fmt.Sprintf("Verifying dynamically allocated host %s is released after cleanup", dynamicHostID))
+			By("Verifying dynamically allocated host is released after cleanup")
+			GinkgoWriter.Printf("Verifying dynamically allocated host %s is released after cleanup\n", dynamicHostID)
 			Eventually(func() bool {
 				state, err := getDedicatedHostState(ctx, ec2Client, dynamicHostID)
 				if err != nil {
@@ -691,7 +703,8 @@ func areMachinesFullyRunning(kubeConfig *rest.Config, machineSetName string, exp
 
 // waitForMachinesFullyRunning waits for all machines in a machineset to be fully running
 func waitForMachinesFullyRunning(kubeConfig *rest.Config, machineSetName string, expectedCount int, timeout time.Duration) {
-	By(fmt.Sprintf("Waiting for all %d machines in machineset %s to be fully running", expectedCount, machineSetName))
+	By("Waiting for machines to be fully running")
+	GinkgoWriter.Printf("Waiting for all %d machines in machineset %s to be fully running\n", expectedCount, machineSetName)
 	Eventually(func() bool {
 		return areMachinesFullyRunning(kubeConfig, machineSetName, expectedCount)
 	}, timeout, defaultPollingInterval).Should(BeTrue())
@@ -907,7 +920,8 @@ func cleanupMachineAndNode(ctx context.Context, kubeConfig *rest.Config, kubeCli
 	// If nodeName is empty, poll the machine to detect late-registering nodes
 	// Use a shorter timeout to avoid blocking cleanup indefinitely
 	if nodeName == "" {
-		By(fmt.Sprintf("Node ref not set initially, polling machine %s for late-registering node", machineName))
+		By("Node ref not set initially, polling for late-registering node")
+		GinkgoWriter.Printf("Polling machine %s for late-registering node\n", machineName)
 		Eventually(func() bool {
 			m, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
 			if apierrors.IsNotFound(err) {
@@ -927,14 +941,15 @@ func cleanupMachineAndNode(ctx context.Context, kubeConfig *rest.Config, kubeCli
 	}
 
 	// Delete the machine
-	By(fmt.Sprintf("Cleaning up test machine %s", machineName))
+	By("Cleaning up test machine")
+	GinkgoWriter.Printf("Deleting machine %s\n", machineName)
 	err = client.Machines(machineutil.MachineAPINamespace).Delete(ctx, machineName, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		Expect(err).NotTo(HaveOccurred())
 	}
 
 	// Wait for machine to be deleted
-	By(fmt.Sprintf("Waiting for machine %s to be deleted", machineName))
+	By("Waiting for machine to be deleted")
 	Eventually(func() bool {
 		_, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
 		return apierrors.IsNotFound(err)
@@ -942,7 +957,8 @@ func cleanupMachineAndNode(ctx context.Context, kubeConfig *rest.Config, kubeCli
 
 	// Wait for associated node to be removed
 	if nodeName != "" {
-		By(fmt.Sprintf("Waiting for node %s to be removed", nodeName))
+		By("Waiting for node to be removed")
+		GinkgoWriter.Printf("Waiting for node %s to be removed\n", nodeName)
 		Eventually(func() bool {
 			_, err := kubeClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 			return apierrors.IsNotFound(err)

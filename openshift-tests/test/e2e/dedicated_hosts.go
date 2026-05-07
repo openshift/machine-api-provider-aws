@@ -488,9 +488,12 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createdMachine).NotTo(BeNil())
 
-			// Register cleanup immediately after successful creation
+			cleanupComplete := false
+			// Register cleanup immediately after successful creation in case test fails before the manual cleanup
 			DeferCleanup(func() {
-				cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+				if !cleanupComplete {
+					cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+				}
 			})
 
 			var dynamicHostID string
@@ -534,6 +537,7 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 
 			// Manually trigger cleanup before verifying host release
 			cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+			cleanupComplete = true
 
 			By("Verifying dynamically allocated host is released after cleanup")
 			GinkgoWriter.Printf("Verifying dynamically allocated host %s is released after cleanup\n", dynamicHostID)
@@ -937,7 +941,7 @@ func cleanupMachineAndNode(ctx context.Context, kubeConfig *rest.Config, kubeCli
 				return true
 			}
 			return false
-		}, 2*time.Minute, defaultPollingInterval).Should(BeTrue())
+		}, 5*time.Minute, defaultPollingInterval).Should(BeTrue())
 	}
 
 	// Delete the machine

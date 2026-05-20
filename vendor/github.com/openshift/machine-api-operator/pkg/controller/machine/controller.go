@@ -112,7 +112,7 @@ func AddWithActuatorOpts(mgr manager.Manager, actuator Actuator, opts controller
 func newReconciler(mgr manager.Manager, actuator Actuator, gate featuregate.MutableFeatureGate) reconcile.Reconciler {
 	r := &ReconcileMachine{
 		Client:        mgr.GetClient(),
-		eventRecorder: mgr.GetEventRecorderFor("machine-controller"), //nolint:staticcheck
+		eventRecorder: mgr.GetEventRecorderFor("machine-controller"),
 		config:        mgr.GetConfig(),
 		scheme:        mgr.GetScheme(),
 		actuator:      actuator,

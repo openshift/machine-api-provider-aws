@@ -13,13 +13,8 @@ import (
 
 // ControlPlaneMachineSetApplyConfiguration represents a declarative configuration of the ControlPlaneMachineSet type for use
 // with apply.
-//
-// ControlPlaneMachineSet ensures that a specified number of control plane machine replicas are running at any given time.
-// Compatibility level 1: Stable within a major release for a minimum of 12 months or 3 minor releases (whichever is longer).
 type ControlPlaneMachineSetApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration `json:",inline"`
-	// metadata is the standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *ControlPlaneMachineSetSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *ControlPlaneMachineSetStatusApplyConfiguration `json:"status,omitempty"`
@@ -36,14 +31,29 @@ func ControlPlaneMachineSet(name, namespace string) *ControlPlaneMachineSetApply
 	return b
 }
 
-// ExtractControlPlaneMachineSetFrom extracts the applied configuration owned by fieldManager from
-// controlPlaneMachineSet for the specified subresource. Pass an empty string for subresource to extract
-// the main resource. Common subresources include "status", "scale", etc.
+// ExtractControlPlaneMachineSet extracts the applied configuration owned by fieldManager from
+// controlPlaneMachineSet. If no managedFields are found in controlPlaneMachineSet for fieldManager, a
+// ControlPlaneMachineSetApplyConfiguration is returned with only the Name, Namespace (if applicable),
+// APIVersion and Kind populated. It is possible that no managed fields were found for because other
+// field managers have taken ownership of all the fields previously owned by fieldManager, or because
+// the fieldManager never owned fields any fields.
 // controlPlaneMachineSet must be a unmodified ControlPlaneMachineSet API object that was retrieved from the Kubernetes API.
-// ExtractControlPlaneMachineSetFrom provides a way to perform a extract/modify-in-place/apply workflow.
+// ExtractControlPlaneMachineSet provides a way to perform a extract/modify-in-place/apply workflow.
 // Note that an extracted apply configuration will contain fewer fields than what the fieldManager previously
 // applied if another fieldManager has updated or force applied any of the previously applied fields.
-func ExtractControlPlaneMachineSetFrom(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string, subresource string) (*ControlPlaneMachineSetApplyConfiguration, error) {
+// Experimental!
+func ExtractControlPlaneMachineSet(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string) (*ControlPlaneMachineSetApplyConfiguration, error) {
+	return extractControlPlaneMachineSet(controlPlaneMachineSet, fieldManager, "")
+}
+
+// ExtractControlPlaneMachineSetStatus is the same as ExtractControlPlaneMachineSet except
+// that it extracts the status subresource applied configuration.
+// Experimental!
+func ExtractControlPlaneMachineSetStatus(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string) (*ControlPlaneMachineSetApplyConfiguration, error) {
+	return extractControlPlaneMachineSet(controlPlaneMachineSet, fieldManager, "status")
+}
+
+func extractControlPlaneMachineSet(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string, subresource string) (*ControlPlaneMachineSetApplyConfiguration, error) {
 	b := &ControlPlaneMachineSetApplyConfiguration{}
 	err := managedfields.ExtractInto(controlPlaneMachineSet, internal.Parser().Type("com.github.openshift.api.machine.v1.ControlPlaneMachineSet"), fieldManager, b, subresource)
 	if err != nil {
@@ -56,27 +66,6 @@ func ExtractControlPlaneMachineSetFrom(controlPlaneMachineSet *machinev1.Control
 	b.WithAPIVersion("machine.openshift.io/v1")
 	return b, nil
 }
-
-// ExtractControlPlaneMachineSet extracts the applied configuration owned by fieldManager from
-// controlPlaneMachineSet. If no managedFields are found in controlPlaneMachineSet for fieldManager, a
-// ControlPlaneMachineSetApplyConfiguration is returned with only the Name, Namespace (if applicable),
-// APIVersion and Kind populated. It is possible that no managed fields were found for because other
-// field managers have taken ownership of all the fields previously owned by fieldManager, or because
-// the fieldManager never owned fields any fields.
-// controlPlaneMachineSet must be a unmodified ControlPlaneMachineSet API object that was retrieved from the Kubernetes API.
-// ExtractControlPlaneMachineSet provides a way to perform a extract/modify-in-place/apply workflow.
-// Note that an extracted apply configuration will contain fewer fields than what the fieldManager previously
-// applied if another fieldManager has updated or force applied any of the previously applied fields.
-func ExtractControlPlaneMachineSet(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string) (*ControlPlaneMachineSetApplyConfiguration, error) {
-	return ExtractControlPlaneMachineSetFrom(controlPlaneMachineSet, fieldManager, "")
-}
-
-// ExtractControlPlaneMachineSetStatus extracts the applied configuration owned by fieldManager from
-// controlPlaneMachineSet for the status subresource.
-func ExtractControlPlaneMachineSetStatus(controlPlaneMachineSet *machinev1.ControlPlaneMachineSet, fieldManager string) (*ControlPlaneMachineSetApplyConfiguration, error) {
-	return ExtractControlPlaneMachineSetFrom(controlPlaneMachineSet, fieldManager, "status")
-}
-
 func (b ControlPlaneMachineSetApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

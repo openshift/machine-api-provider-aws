@@ -1,7 +1,9 @@
 package client
 
 import (
+	"fmt"
 	"io/ioutil"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -157,4 +159,36 @@ func TestRegionValidationCachePerCredentialIsolation(t *testing.T) {
 	if validated {
 		t.Error("expected cache miss for different credentials, got hit")
 	}
+}
+
+type spyTransport struct {
+	closed bool
+}
+
+func (s *spyTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *spyTransport) CloseIdleConnections() {
+	s.closed = true
+}
+
+func TestCloseIdleConnectionsClosesTransport(t *testing.T) {
+	spy := &spyTransport{}
+	c := &awsClient{
+		session: session.Must(session.NewSession(&aws.Config{
+			Region:      aws.String("us-east-1"),
+			Credentials: credentials.NewStaticCredentials("id", "secret", "token"),
+			HTTPClient:  &http.Client{Transport: spy},
+		})),
+	}
+	c.CloseIdleConnections()
+	if !spy.closed {
+		t.Error("expected CloseIdleConnections to be called")
+	}
+}
+
+func TestCloseIdleConnectionsNilSession(t *testing.T) {
+	c := &awsClient{}
+	c.CloseIdleConnections()
 }

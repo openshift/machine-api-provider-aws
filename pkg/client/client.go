@@ -107,6 +107,14 @@ type awsClient struct {
 	ec2Client   ec2iface.EC2API
 	elbClient   elbiface.ELBAPI
 	elbv2Client elbv2iface.ELBV2API
+	session     *session.Session
+}
+
+func (c *awsClient) CloseIdleConnections() {
+	if c.session != nil && c.session.Config.HTTPClient != nil {
+		c.session.Config.HTTPClient.CloseIdleConnections()
+		klog.V(4).Info("Closed AWS session idle connections")
+	}
 }
 
 func (c *awsClient) DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
@@ -207,6 +215,7 @@ func NewClient(ctrlRuntimeClient client.Client, secretName, namespace, region st
 		ec2Client:   ec2.New(s),
 		elbClient:   elb.New(s),
 		elbv2Client: elbv2.New(s),
+		session:     s,
 	}, nil
 }
 
@@ -232,6 +241,7 @@ func NewClientFromKeys(accessKey, secretAccessKey, region string) (Client, error
 		ec2Client:   ec2.New(s),
 		elbClient:   elb.New(s),
 		elbv2Client: elbv2.New(s),
+		session:     s,
 	}, nil
 }
 
@@ -408,6 +418,7 @@ func NewValidatedClient(ctrlRuntimeClient client.Client, secretName, namespace, 
 		ec2Client:   ec2.New(s),
 		elbClient:   elb.New(s),
 		elbv2Client: elbv2.New(s),
+		session:     s,
 	}, nil
 }
 

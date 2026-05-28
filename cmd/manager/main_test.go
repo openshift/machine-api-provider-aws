@@ -43,8 +43,13 @@ func generateSelfSignedCert(dir string) (certFile, keyFile string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	certOut.Close()
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		certOut.Close()
+		return "", "", err
+	}
+	if err := certOut.Close(); err != nil {
+		return "", "", err
+	}
 
 	keyDER, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
@@ -54,8 +59,13 @@ func generateSelfSignedCert(dir string) (certFile, keyFile string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
-	keyOut.Close()
+	if err := pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}); err != nil {
+		keyOut.Close()
+		return "", "", err
+	}
+	if err := keyOut.Close(); err != nil {
+		return "", "", err
+	}
 
 	return certFile, keyFile, nil
 }

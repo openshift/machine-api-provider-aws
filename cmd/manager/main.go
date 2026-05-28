@@ -14,8 +14,11 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -53,6 +56,42 @@ var (
 	renewDealine  = 110 * time.Second
 	retryPeriod   = 20 * time.Second
 )
+
+type pprofServer struct {
+	Addr     string
+	CertFile string
+	KeyFile  string
+}
+
+func (s *pprofServer) Start(ctx context.Context) error {
+	srv := &http.Server{
+		Addr:    s.Addr,
+		Handler: http.DefaultServeMux,
+	}
+	klog.Infof("Starting pprof server on %s", s.Addr)
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServeTLS(s.CertFile, s.KeyFile); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("pprof server failed: %w", err)
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
+}
+
+func (s *pprofServer) NeedLeaderElection() bool {
+	return false
+}
 
 func main() {
 	printVersion := flag.Bool(
@@ -95,6 +134,12 @@ func main() {
 		"health-addr",
 		":9440",
 		"The address for health checking.",
+	)
+
+	pprofAddr := flag.String(
+		"pprof-bind-address",
+		":6060",
+		"The address for serving pprof profiling endpoints over TLS.",
 	)
 
 	// Sets up feature gates (version from build time, default 4 for unknown)
@@ -229,6 +274,14 @@ func main() {
 
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		klog.Fatal(err)
+	}
+
+	if err := mgr.Add(&pprofServer{
+		Addr:     *pprofAddr,
+		CertFile: "/etc/machine-api-operator/tls/tls.crt",
+		KeyFile:  "/etc/machine-api-operator/tls/tls.key",
+	}); err != nil {
+		klog.Fatalf("Error adding pprof server: %v", err)
 	}
 
 	// Start the Cmd

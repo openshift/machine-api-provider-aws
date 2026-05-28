@@ -91,6 +91,7 @@ func (a *Actuator) Create(ctx context.Context, machine *machinev1beta1.Machine) 
 		fmtErr := fmt.Errorf(scopeFailFmt, machine.GetName(), err)
 		return a.handleMachineError(machine, fmtErr, createEventAction)
 	}
+	defer scope.Close()
 	if err := newReconciler(scope).create(); err != nil {
 		if err := scope.patchMachine(); err != nil {
 			return err
@@ -117,6 +118,7 @@ func (a *Actuator) Exists(ctx context.Context, machine *machinev1beta1.Machine) 
 	if err != nil {
 		return false, fmt.Errorf(scopeFailFmt, machine.GetName(), err)
 	}
+	defer scope.Close()
 	return newReconciler(scope).exists()
 }
 
@@ -135,6 +137,7 @@ func (a *Actuator) Update(ctx context.Context, machine *machinev1beta1.Machine) 
 		fmtErr := fmt.Errorf(scopeFailFmt, machine.GetName(), err)
 		return a.handleMachineError(machine, fmtErr, updateEventAction)
 	}
+	defer scope.Close()
 	if err := newReconciler(scope).update(); err != nil {
 		// Update machine and machine status in case it was modified
 		if err := scope.patchMachine(); err != nil {
@@ -175,6 +178,7 @@ func (a *Actuator) Delete(ctx context.Context, machine *machinev1beta1.Machine) 
 		fmtErr := fmt.Errorf(scopeFailFmt, machine.GetName(), err)
 		return a.handleMachineError(machine, fmtErr, deleteEventAction)
 	}
+	defer scope.Close()
 	if err := newReconciler(scope).delete(); err != nil {
 		if err := scope.patchMachine(); err != nil {
 			return err

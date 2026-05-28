@@ -434,3 +434,32 @@ func (mr *MockRegionCacheMockRecorder) GetCachedDescribeRegions(awsSession inter
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachedDescribeRegions", reflect.TypeOf((*MockRegionCache)(nil).GetCachedDescribeRegions), awsSession)
 }
+
+// IsRegionValidated mocks base method.
+func (m *MockRegionCache) IsRegionValidated(awsSession *session.Session, region string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsRegionValidated", awsSession, region)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsRegionValidated indicates an expected call of IsRegionValidated.
+func (mr *MockRegionCacheMockRecorder) IsRegionValidated(awsSession, region interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRegionValidated", reflect.TypeOf((*MockRegionCache)(nil).IsRegionValidated), awsSession, region)
+}
+
+// SetRegionValidated mocks base method.
+func (m *MockRegionCache) SetRegionValidated(awsSession *session.Session, region string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetRegionValidated", awsSession, region)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetRegionValidated indicates an expected call of SetRegionValidated.
+func (mr *MockRegionCacheMockRecorder) SetRegionValidated(awsSession, region interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRegionValidated", reflect.TypeOf((*MockRegionCache)(nil).SetRegionValidated), awsSession, region)
+}

@@ -37,6 +37,10 @@ type machineScopeParams struct {
 	regionCache awsclient.RegionCache
 }
 
+type idleCloser interface {
+	CloseIdleConnections()
+}
+
 type machineScope struct {
 	context.Context
 
@@ -83,6 +87,12 @@ func newMachineScope(params machineScopeParams) (*machineScope, error) {
 		providerSpec:       providerSpec,
 		providerStatus:     providerStatus,
 	}, nil
+}
+
+func (s *machineScope) Close() {
+	if c, ok := s.awsClient.(idleCloser); ok {
+		c.CloseIdleConnections()
+	}
 }
 
 // Patch patches the machine spec and machine status after reconciling.

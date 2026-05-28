@@ -254,6 +254,7 @@ func NewClientFromKeys(accessKey, secretAccessKey, region string) (Client, error
 type DescribeRegionsData struct {
 	err                   error
 	describeRegionsOutput *ec2.DescribeRegionsOutput
+	validatedRegions      map[string]bool
 	lastUpdated           time.Time
 }
 
@@ -262,9 +263,11 @@ type regionCache struct {
 	mutex sync.RWMutex
 }
 
-// RegionCache caches successful DescribeRegions API calls.
+// RegionCache caches successful DescribeRegions API calls and region validation results.
 type RegionCache interface {
 	GetCachedDescribeRegions(awsSession *session.Session) (*ec2.DescribeRegionsOutput, error)
+	IsRegionValidated(awsSession *session.Session, region string) (bool, error)
+	SetRegionValidated(awsSession *session.Session, region string) error
 }
 
 // NewRegionCache creates a new empty DescribeRegionsData cache with lock.
@@ -312,6 +315,44 @@ func (c *regionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec
 	return describeRegionsOutput, nil
 }
 
+func (c *regionCache) IsRegionValidated(awsSession *session.Session, region string) (bool, error) {
+	creds, err := awsSession.Config.Credentials.Get()
+	if err != nil {
+		return false, err
+	}
+
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	regionData := c.data[creds.AccessKeyID]
+	if regionData.validatedRegions != nil &&
+		regionData.validatedRegions[region] &&
+		time.Since(regionData.lastUpdated) < awsRegionsCacheExpirationDuration {
+		klog.V(4).Infof("Region %s validation cached, skipping endpoint check", region)
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *regionCache) SetRegionValidated(awsSession *session.Session, region string) error {
+	creds, err := awsSession.Config.Credentials.Get()
+	if err != nil {
+		return err
+	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	regionData := c.data[creds.AccessKeyID]
+	if regionData.validatedRegions == nil {
+		regionData.validatedRegions = make(map[string]bool)
+	}
+	regionData.validatedRegions[region] = true
+	if regionData.lastUpdated.IsZero() {
+		regionData.lastUpdated = time.Now()
+	}
+	c.data[creds.AccessKeyID] = regionData
+	return nil
+}
+
 // Check that region is in the DescribeRegions list and is opted in.
 func validateRegion(describeRegionsOutput *ec2.DescribeRegionsOutput, region string) (*ec2.Region, error) {
 	var regionData *ec2.Region
@@ -341,31 +382,41 @@ func NewValidatedClient(ctrlRuntimeClient client.Client, secretName, namespace, 
 		return nil, err
 	}
 
-	// Check that the endpoint can be resolved by the endpoint resolver.
-	// If the endpoint is not resolvable locally, we try to validate using the AWS API.
-	// If the endpoint is not known, it is not a standard or configured custom region.
-	// In that case, the client will likely not be able to connect
-	_, err = s.Config.EndpointResolver.EndpointFor("ec2", region, func(opts *endpoints.Options) {
-		opts.StrictMatching = true
-	})
+	validated, err := regionCache.IsRegionValidated(s, region)
 	if err != nil {
-		switch err.(type) {
-		case endpoints.UnknownEndpointError:
-			klog.Infof("Region %s is not recognized by aws-sdk, trying to validate using API", region)
-			var describeRegionsOutput *ec2.DescribeRegionsOutput
-			describeRegionsOutput, err = regionCache.GetCachedDescribeRegions(s)
-			if err != nil {
-				return nil, fmt.Errorf("could not retrieve region data: %w", err)
-			}
+		return nil, fmt.Errorf("could not check region validation cache: %w", err)
+	}
 
-			_, err = validateRegion(describeRegionsOutput, region)
-			if err != nil {
-				return nil, err
+	if !validated {
+		// Check that the endpoint can be resolved by the endpoint resolver.
+		// If the endpoint is not resolvable locally, we try to validate using the AWS API.
+		// If the endpoint is not known, it is not a standard or configured custom region.
+		// In that case, the client will likely not be able to connect
+		_, err = s.Config.EndpointResolver.EndpointFor("ec2", region, func(opts *endpoints.Options) {
+			opts.StrictMatching = true
+		})
+		if err != nil {
+			switch err.(type) {
+			case endpoints.UnknownEndpointError:
+				klog.Infof("Region %s is not recognized by aws-sdk, trying to validate using API", region)
+				var describeRegionsOutput *ec2.DescribeRegionsOutput
+				describeRegionsOutput, err = regionCache.GetCachedDescribeRegions(s)
+				if err != nil {
+					return nil, fmt.Errorf("could not retrieve region data: %w", err)
+				}
+
+				_, err = validateRegion(describeRegionsOutput, region)
+				if err != nil {
+					return nil, err
+				}
+				klog.V(4).Infof("Region %s validated via API, caching result", region)
+				if cacheErr := regionCache.SetRegionValidated(s, region); cacheErr != nil {
+					klog.V(4).Infof("Failed to cache region validation for %s: %v", region, cacheErr)
+				}
+			default:
+				return nil, fmt.Errorf("region %q not resolved: %w", region, err)
 			}
 		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("region %q not resolved: %w", region, err)
 	}
 
 	return &awsClient{

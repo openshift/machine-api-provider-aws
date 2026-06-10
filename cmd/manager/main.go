@@ -16,6 +16,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -95,6 +96,18 @@ func main() {
 		"health-addr",
 		":9440",
 		"The address for health checking.",
+	)
+
+	enablePprof := flag.Bool(
+		"enable-pprof",
+		false,
+		"Enable the pprof profiling endpoint.",
+	)
+
+	pprofAddr := flag.String(
+		"pprof-bind-address",
+		"127.0.0.1:6060",
+		"The address for serving pprof profiling endpoints (requires --enable-pprof).",
 	)
 
 	// Sets up feature gates (version from build time, default 4 for unknown)
@@ -229,6 +242,14 @@ func main() {
 
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		klog.Fatal(err)
+	}
+
+	if *enablePprof {
+		if err := mgr.Add(&pprofServer{
+			Addr: *pprofAddr,
+		}); err != nil {
+			klog.Fatalf("Error adding pprof server: %v", err)
+		}
 	}
 
 	// Start the Cmd

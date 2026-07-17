@@ -110,6 +110,12 @@ func main() {
 		"The address for serving pprof profiling endpoints (requires --enable-pprof).",
 	)
 
+	maxConcurrentReconciles := flag.Int(
+		"max-concurrent-reconciles",
+		1,
+		"Maximum number of concurrent reconciles per controller instance.",
+	)
+
 	// Sets up feature gates (version from build time, default 4 for unknown)
 	// Default should be changed to 5 once we branch for 5
 	majorVersion := version.Version.Major
@@ -216,7 +222,9 @@ func main() {
 		RegionCache:         describeRegionsCache,
 	})
 
-	if err := machine.AddWithActuator(mgr, machineActuator, defaultMutableGate); err != nil {
+	if err := machine.AddWithActuatorOpts(mgr, machineActuator, controller.Options{
+		MaxConcurrentReconciles: *maxConcurrentReconciles,
+	}, defaultMutableGate); err != nil {
 		klog.Fatalf("Error adding actuator: %v", err)
 	}
 

@@ -809,6 +809,7 @@ func isAWSDualStack(infra *configv1.Infrastructure) bool {
 func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachineProviderConfig, infra *configv1.Infrastructure) *ec2.InstanceMetadataOptionsRequest {
 	imdsOptions := &ec2.InstanceMetadataOptionsRequest{}
 
+	// Handle Authentication (HttpTokens)
 	switch providerConfig.MetadataServiceOptions.Authentication {
 	case "":
 		// not set, let aws to pick a default. `optional` at this point.
@@ -819,8 +820,42 @@ func getInstanceMetadataOptionsRequest(providerConfig *machinev1beta1.AWSMachine
 		imdsOptions.HttpTokens = aws.String(ec2.HttpTokensStateRequired)
 	}
 
-	if isAWSDualStack(infra) {
-		imdsOptions.HttpProtocolIpv6 = ptr.To("enabled")
+	// Handle HTTPEndpoint
+	if providerConfig.MetadataServiceOptions.HTTPEndpoint != nil {
+		switch *providerConfig.MetadataServiceOptions.HTTPEndpoint {
+		case machinev1beta1.HTTPEndpointEnabled:
+			imdsOptions.HttpEndpoint = aws.String(ec2.InstanceMetadataEndpointStateEnabled)
+		case machinev1beta1.HTTPEndpointDisabled:
+			imdsOptions.HttpEndpoint = aws.String(ec2.InstanceMetadataEndpointStateDisabled)
+		}
+	}
+
+	// Handle HTTPProtocolIPv6. Explicit providerSpec wins; otherwise enable for dual-stack clusters.
+	switch {
+	case providerConfig.MetadataServiceOptions.HTTPProtocolIPv6 != nil:
+		switch *providerConfig.MetadataServiceOptions.HTTPProtocolIPv6 {
+		case machinev1beta1.HTTPProtocolIPv6Enabled:
+			imdsOptions.HttpProtocolIpv6 = aws.String(ec2.InstanceMetadataProtocolStateEnabled)
+		case machinev1beta1.HTTPProtocolIPv6Disabled:
+			imdsOptions.HttpProtocolIpv6 = aws.String(ec2.InstanceMetadataProtocolStateDisabled)
+		}
+	case isAWSDualStack(infra):
+		imdsOptions.HttpProtocolIpv6 = aws.String(ec2.InstanceMetadataProtocolStateEnabled)
+	}
+
+	// Handle HTTPPutResponseHopLimit
+	if providerConfig.MetadataServiceOptions.HTTPPutResponseHopLimit != nil {
+		imdsOptions.HttpPutResponseHopLimit = providerConfig.MetadataServiceOptions.HTTPPutResponseHopLimit
+	}
+
+	// Handle InstanceMetadataTags
+	if providerConfig.MetadataServiceOptions.InstanceMetadataTags != nil {
+		switch *providerConfig.MetadataServiceOptions.InstanceMetadataTags {
+		case machinev1beta1.InstanceMetadataTagsEnabled:
+			imdsOptions.InstanceMetadataTags = aws.String(ec2.InstanceMetadataTagsStateEnabled)
+		case machinev1beta1.InstanceMetadataTagsDisabled:
+			imdsOptions.InstanceMetadataTags = aws.String(ec2.InstanceMetadataTagsStateDisabled)
+		}
 	}
 
 	if *imdsOptions == (ec2.InstanceMetadataOptionsRequest{}) {

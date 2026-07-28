@@ -1571,6 +1571,148 @@ func TestGetInstanceMetadataOptionsRequest(t *testing.T) {
 			},
 			expected: nil,
 		},
+		{
+			name: "http endpoint enabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPEndpoint: ptr.To(machinev1beta1.HTTPEndpointEnabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpEndpoint: aws.String(ec2.InstanceMetadataEndpointStateEnabled),
+			},
+		},
+		{
+			name: "http endpoint disabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPEndpoint: ptr.To(machinev1beta1.HTTPEndpointDisabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpEndpoint: aws.String(ec2.InstanceMetadataEndpointStateDisabled),
+			},
+		},
+		{
+			name: "http protocol ipv6 enabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPProtocolIPv6: ptr.To(machinev1beta1.HTTPProtocolIPv6Enabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpProtocolIpv6: aws.String(ec2.InstanceMetadataProtocolStateEnabled),
+			},
+		},
+		{
+			name: "http protocol ipv6 disabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPProtocolIPv6: ptr.To(machinev1beta1.HTTPProtocolIPv6Disabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpProtocolIpv6: aws.String(ec2.InstanceMetadataProtocolStateDisabled),
+			},
+		},
+		{
+			name: "explicit http protocol ipv6 disabled overrides dual-stack default",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPProtocolIPv6: ptr.To(machinev1beta1.HTTPProtocolIPv6Disabled),
+				},
+			},
+			infra: &configv1.Infrastructure{
+				Status: configv1.InfrastructureStatus{
+					PlatformStatus: &configv1.PlatformStatus{
+						AWS: &configv1.AWSPlatformStatus{
+							IPFamily: configv1.DualStackIPv6Primary,
+						},
+					},
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpProtocolIpv6: aws.String(ec2.InstanceMetadataProtocolStateDisabled),
+			},
+		},
+		{
+			name: "http put response hop limit set to 1",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPPutResponseHopLimit: aws.Int64(1),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpPutResponseHopLimit: aws.Int64(1),
+			},
+		},
+		{
+			name: "http put response hop limit set to 64",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					HTTPPutResponseHopLimit: aws.Int64(64),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpPutResponseHopLimit: aws.Int64(64),
+			},
+		},
+		{
+			name: "instance metadata tags enabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					InstanceMetadataTags: ptr.To(machinev1beta1.InstanceMetadataTagsEnabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				InstanceMetadataTags: aws.String(ec2.InstanceMetadataTagsStateEnabled),
+			},
+		},
+		{
+			name: "instance metadata tags disabled",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					InstanceMetadataTags: ptr.To(machinev1beta1.InstanceMetadataTagsDisabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				InstanceMetadataTags: aws.String(ec2.InstanceMetadataTagsStateDisabled),
+			},
+		},
+		{
+			name: "all options set",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					Authentication:          machinev1beta1.MetadataServiceAuthenticationRequired,
+					HTTPEndpoint:            ptr.To(machinev1beta1.HTTPEndpointEnabled),
+					HTTPProtocolIPv6:        ptr.To(machinev1beta1.HTTPProtocolIPv6Enabled),
+					HTTPPutResponseHopLimit: aws.Int64(32),
+					InstanceMetadataTags:    ptr.To(machinev1beta1.InstanceMetadataTagsEnabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpTokens:              aws.String(ec2.HttpTokensStateRequired),
+				HttpEndpoint:            aws.String(ec2.InstanceMetadataEndpointStateEnabled),
+				HttpProtocolIpv6:        aws.String(ec2.InstanceMetadataProtocolStateEnabled),
+				HttpPutResponseHopLimit: aws.Int64(32),
+				InstanceMetadataTags:    aws.String(ec2.InstanceMetadataTagsStateEnabled),
+			},
+		},
+		{
+			name: "mixed authentication and new fields",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				MetadataServiceOptions: machinev1beta1.MetadataServiceOptions{
+					Authentication:          machinev1beta1.MetadataServiceAuthenticationOptional,
+					HTTPPutResponseHopLimit: aws.Int64(5),
+					InstanceMetadataTags:    ptr.To(machinev1beta1.InstanceMetadataTagsEnabled),
+				},
+			},
+			expected: &ec2.InstanceMetadataOptionsRequest{
+				HttpTokens:              aws.String(ec2.HttpTokensStateOptional),
+				HttpPutResponseHopLimit: aws.Int64(5),
+				InstanceMetadataTags:    aws.String(ec2.InstanceMetadataTagsStateEnabled),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

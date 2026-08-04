@@ -1974,6 +1974,56 @@ func TestGetCPUOptionsRequest(t *testing.T) {
 			},
 			expectedRequest: nil,
 		},
+		{
+			name: "with CoreCount set",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					CoreCount: ptr.To[int64](4),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				CoreCount: aws.Int64(4),
+			},
+		},
+		{
+			name: "with ThreadsPerCore set",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					ThreadsPerCore: ptr.To[int64](1),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				ThreadsPerCore: aws.Int64(1),
+			},
+		},
+		{
+			name: "with CoreCount and ThreadsPerCore set",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					CoreCount:      ptr.To[int64](2),
+					ThreadsPerCore: ptr.To[int64](2),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				CoreCount:      aws.Int64(2),
+				ThreadsPerCore: aws.Int64(2),
+			},
+		},
+		{
+			name: "with all CPUOptions fields set",
+			providerConfig: &machinev1beta1.AWSMachineProviderConfig{
+				CPUOptions: &machinev1beta1.CPUOptions{
+					ConfidentialCompute: ptr.To(machinev1beta1.AWSConfidentialComputePolicySEVSNP),
+					CoreCount:           ptr.To[int64](4),
+					ThreadsPerCore:      ptr.To[int64](1),
+				},
+			},
+			expectedRequest: &ec2.CpuOptionsRequest{
+				AmdSevSnp:      aws.String(ec2.AmdSevSnpSpecificationEnabled),
+				CoreCount:      aws.Int64(4),
+				ThreadsPerCore: aws.Int64(1),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

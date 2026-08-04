@@ -154,6 +154,26 @@ type CPUOptions struct {
 	// which is subject to change without notice. The current default is Disabled.
 	// +optional
 	ConfidentialCompute *AWSConfidentialComputePolicy `json:"confidentialCompute,omitempty"`
+	// coreCount specifies the number of CPU cores for the instance.
+	// The number of valid CPU cores depends on the instance type.
+	// When omitted, this means no opinion and the platform chooses the default,
+	// which is subject to change without notice.
+	// More details:
+	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/cpu-options-supported-instances-values.html
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	CoreCount *int64 `json:"coreCount,omitempty"`
+	// threadsPerCore specifies the number of threads per CPU core for the instance.
+	// To disable multithreading, specify a value of 1.
+	// Otherwise, specify a value of 2 to enable multithreading.
+	// The number of valid threads per core depends on the instance type.
+	// When omitted, this means no opinion and the platform chooses the default,
+	// which is subject to change without notice.
+	// More details:
+	// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/cpu-options-supported-instances-values.html
+	// +kubebuilder:validation:Enum=1;2
+	// +optional
+	ThreadsPerCore *int64 `json:"threadsPerCore,omitempty"`
 }
 
 // BlockDeviceMappingSpec describes a block device mapping

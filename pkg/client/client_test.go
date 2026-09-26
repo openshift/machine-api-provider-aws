@@ -1,9 +1,15 @@
 package client
 
 import (
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,4 +79,116 @@ func TestUseCustomCABundle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testSession(accessKeyID string) *session.Session {
+	return session.Must(session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(accessKeyID, "secret", "token"),
+		Region:      aws.String("us-east-1"),
+	}))
+}
+
+func TestRegionValidationCacheMiss(t *testing.T) {
+	cache := NewRegionCache()
+	sess := testSession("AKID-A")
+
+	validated, err := cache.IsRegionValidated(sess, "mx-central-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if validated {
+		t.Error("expected cache miss on first call, got hit")
+	}
+}
+
+func TestRegionValidationCacheHit(t *testing.T) {
+	cache := NewRegionCache()
+	sess := testSession("AKID-A")
+
+	if err := cache.SetRegionValidated(sess, "mx-central-1"); err != nil {
+		t.Fatalf("unexpected error from SetRegionValidated: %v", err)
+	}
+
+	validated, err := cache.IsRegionValidated(sess, "mx-central-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !validated {
+		t.Error("expected cache hit after SetRegionValidated, got miss")
+	}
+}
+
+func TestRegionValidationCacheExpiry(t *testing.T) {
+	c := &regionCache{
+		data:  map[string]DescribeRegionsData{},
+		mutex: sync.RWMutex{},
+	}
+	sess := testSession("AKID-A")
+
+	if err := c.SetRegionValidated(sess, "mx-central-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Expire the cache entry
+	data := c.data["AKID-A"]
+	data.lastUpdated = time.Now().Add(-awsRegionsCacheExpirationDuration - time.Minute)
+	c.data["AKID-A"] = data
+
+	validated, err := c.IsRegionValidated(sess, "mx-central-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if validated {
+		t.Error("expected cache miss after expiry, got hit")
+	}
+}
+
+func TestRegionValidationCachePerCredentialIsolation(t *testing.T) {
+	cache := NewRegionCache()
+	sessA := testSession("AKID-A")
+	sessB := testSession("AKID-B")
+
+	if err := cache.SetRegionValidated(sessA, "mx-central-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	validated, err := cache.IsRegionValidated(sessB, "mx-central-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if validated {
+		t.Error("expected cache miss for different credentials, got hit")
+	}
+}
+
+type spyTransport struct {
+	closed bool
+}
+
+func (s *spyTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *spyTransport) CloseIdleConnections() {
+	s.closed = true
+}
+
+func TestCloseIdleConnectionsClosesTransport(t *testing.T) {
+	spy := &spyTransport{}
+	c := &awsClient{
+		session: session.Must(session.NewSession(&aws.Config{
+			Region:      aws.String("us-east-1"),
+			Credentials: credentials.NewStaticCredentials("id", "secret", "token"),
+			HTTPClient:  &http.Client{Transport: spy},
+		})),
+	}
+	c.CloseIdleConnections()
+	if !spy.closed {
+		t.Error("expected CloseIdleConnections to be called")
+	}
+}
+
+func TestCloseIdleConnectionsNilSession(t *testing.T) {
+	c := &awsClient{}
+	c.CloseIdleConnections()
 }

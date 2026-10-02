@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -49,12 +51,19 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 		kubeClient = kubernetes.NewForConfigOrDie(rest.AddUserAgent(kubeConfig, clientName))
 		Expect(kubeClient).NotTo(BeNil())
 
-		// Check to see if we have any machineset with dedicated hosts
+		// Skip up front if this cluster isn't running the Machine API at all (e.g. HyperShift
+		// hosted clusters, which manage nodes via NodePools in the management cluster rather
+		// than Machines/MachineSets in-guest).
+		skipUnlessMachineAPIOperator(ctx, kubeConfig, kubeClient)
+
+		// Check to see if we have any machineset with dedicated hosts. The AWSDedicatedHosts
+		// feature gate is enabled cluster-wide on every TechPreview job, so this suite runs on
+		// jobs that never configure dedicated hosts. Some clusters (e.g. single-node) may
+		// simply have zero worker MachineSets - skip rather than fail in that case.
 		machineSets, err := machineutil.GetMachineSets(kubeConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(machineSets.Items)).NotTo(Equal(0), "cluster should have at least 1 worker machine set created by installer")
 
-		if !existsDedicatedHost(machineSets) {
+		if len(machineSets.Items) == 0 || !existsDedicatedHost(machineSets) {
 			Skip("No dedicated hosts found - skipping all dedicated host tests")
 		}
 
@@ -584,6 +593,71 @@ func getRegionFromMachineSet(machineSet *machinev1beta1.MachineSet) (string, err
 	}
 	region := availabilityZone[:len(availabilityZone)-1]
 	return region, nil
+}
+
+// errSkip carries a Ginkgo skip reason out of a wait.PollUntilContextTimeout condition
+// function. Calling Skip() directly inside a poll condition would panic through
+// wait.loopConditionUntilContext, which wraps the condition in
+// runtime.HandleCrashWithContext - that recovers the panic just to log it as an
+// "Observed a panic" error before re-panicking, which looks like a crash even though
+// the spec still ends up correctly skipped. Returning this error instead stops the
+// poll immediately without tripping that crash handler, and the caller performs the
+// actual Skip() once back in the BeforeEach's own goroutine frame.
+type errSkip struct{ reason string }
+
+func (e *errSkip) Error() string { return e.reason }
+
+// skipUnlessMachineAPIOperator mirrors the check openshift/origin performs before relying on
+// the Machine API (see test/extended/machines/machines.go's skipUnlessMachineAPIOperator). It
+// polls rather than checking once so that transient API errors don't fail the whole suite, and
+// skips the test if the Machine CRD isn't installed, no Machines exist, or the
+// openshift-machine-api namespace isn't present - all signs the cluster isn't running the
+// Machine API operator.
+func skipUnlessMachineAPIOperator(ctx context.Context, kubeConfig *rest.Config, kubeClient *kubernetes.Clientset) {
+	client, err := machineclient.NewForConfig(kubeConfig)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, true, func(pollCtx context.Context) (bool, error) {
+		// Listing the resource will return an IsNotFound error when the CRD has not been
+		// installed. Otherwise it would return an empty list if no Machines are in use, which
+		// should not be possible if the Machine API operator is in use.
+		machines, err := client.Machines(machineutil.MachineAPINamespace).List(pollCtx, metav1.ListOptions{})
+		if err == nil {
+			if len(machines.Items) == 0 {
+				return false, &errSkip{"The cluster supports the Machine CRD but has no Machines available"}
+			}
+			return true, nil
+		}
+
+		if apierrors.IsNotFound(err) {
+			return false, &errSkip{fmt.Sprintf("The cluster does not support machine instances: %v", err)}
+		}
+		GinkgoWriter.Printf("Unable to check for machine api operator: %v\n", err)
+		return false, nil
+	})
+	var skip *errSkip
+	if errors.As(err, &skip) {
+		Skip(skip.reason)
+	}
+	Expect(err).NotTo(HaveOccurred())
+
+	err = wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, true, func(pollCtx context.Context) (bool, error) {
+		// Check if the openshift-machine-api namespace is present, if not then this cluster is
+		// not using the Machine API.
+		_, err := kubeClient.CoreV1().Namespaces().Get(pollCtx, machineutil.MachineAPINamespace, metav1.GetOptions{})
+		if err == nil {
+			return true, nil
+		}
+		if apierrors.IsNotFound(err) {
+			return false, &errSkip{"The cluster machines are not managed by the machine api operator"}
+		}
+		GinkgoWriter.Printf("Unable to check for machine api operator: %v\n", err)
+		return false, nil
+	})
+	if errors.As(err, &skip) {
+		Skip(skip.reason)
+	}
+	Expect(err).NotTo(HaveOccurred())
 }
 
 // existsDedicatedHost checks if any machineset has a dedicated host configured

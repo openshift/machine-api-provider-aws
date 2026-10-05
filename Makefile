@@ -39,7 +39,7 @@ REPO_PATH   ?= github.com/openshift/machine-api-provider-aws
 LD_FLAGS    ?= -X $(REPO_PATH)/pkg/version.Raw=$(VERSION) -extldflags "-static"
 MUTABLE_TAG ?= latest
 IMAGE        = origin-aws-machine-controllers
-BUILD_IMAGE ?= registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.26-openshift-5.0
+BUILD_IMAGE ?= registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.26-openshift-5.1
 
 # race tests need CGO_ENABLED, everything else should have it disabled
 CGO_ENABLED = 0

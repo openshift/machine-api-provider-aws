@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -354,20 +355,43 @@ func TestCreateDedicatedHostCapacityRequeue(t *testing.T) {
 	assertRequeueAfterError(actuator.Create(ctx, machine))
 
 	// Pick up the machine as patched by the first attempt, like the machine
-	// controller would on the next reconcile.
-	g.Expect(getMachine()).To(Succeed())
+	// controller would on the next reconcile: its next attempt only runs once
+	// the patched machine has reached the informer cache.
+	getPatchedMachine := func() error {
+		if err := getMachine(); err != nil {
+			return err
+		}
+		providerStatus, err := ProviderStatusFromRawExtension(machine.Status.ProviderStatus)
+		if err != nil {
+			return err
+		}
+		condition := findCondition(providerStatus.Conditions, string(machinev1beta1.MachineCreation))
+		if condition == nil || condition.Reason != DedicatedHostCapacityUnavailableConditionReason {
+			return errors.New("machine creation condition with the capacity reason is not yet visible")
+		}
+		return nil
+	}
+	g.Eventually(getPatchedMachine, timeout).Should(Succeed())
 	assertRequeueAfterError(actuator.Create(ctx, machine))
 
 	// Exactly one distinct event is emitted for the whole shortage, with the
-	// dedicated reason rather than FailedCreate.
+	// dedicated reason rather than FailedCreate. The event correlator dedupes
+	// identical emissions into a single Event with an incremented Count, so a
+	// duplicate emission would still pass a length check alone.
 	waitForEvent := func(g Gomega) error {
 		g.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
 		if len(eventList.Items) != 1 {
-			return fmt.Errorf("Expected len 1, got %d", len(eventList.Items))
+			return fmt.Errorf("expected exactly 1 event, got %d", len(eventList.Items))
+		}
+		if eventList.Items[0].Count != 1 {
+			return fmt.Errorf("expected event count 1, got %d", eventList.Items[0].Count)
 		}
 		return nil
 	}
 	g.Eventually(waitForEvent, timeout).Should(Succeed())
+	// A duplicate emission from the second Create attempt could land shortly
+	// after Eventually first observes the event.
+	g.Consistently(waitForEvent, 2*time.Second).Should(Succeed())
 
 	g.Expect(eventList.Items[0].Reason).To(Equal(insufficientDedicatedHostCapacityEventReason))
 	g.Expect(eventList.Items[0].Type).To(Equal(v1.EventTypeWarning))

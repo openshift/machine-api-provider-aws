@@ -7,7 +7,7 @@
 package tools
 
 import (
-	_ "github.com/golang/mock/mockgen"
+	_ "go.uber.org/mock/mockgen"
 	_ "github.com/onsi/ginkgo/v2/ginkgo"
 	_ "github.com/openshift/api/config/v1/zz_generated.crd-manifests"
 	_ "github.com/openshift/api/machine/v1/zz_generated.crd-manifests"

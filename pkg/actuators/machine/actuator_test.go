@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"testing"
 
+	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
 	v1 "k8s.io/api/core/v1"
@@ -20,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2/klogr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -258,6 +261,126 @@ func TestMachineEvents(t *testing.T) {
 			gs.Expect(eventList.Items[0].Message).To(Equal(tc.event))
 		})
 	}
+}
+
+// TestCreateDedicatedHostCapacityRequeue verifies that when machine creation
+// is blocked by an AWS dedicated host capacity shortage, Create requeues after
+// a delay instead of erroring out, and emits the distinct
+// InsufficientDedicatedHostCapacity event exactly once per shortage (and no
+// FailedCreate events), so a multi-minute drought cannot trip the
+// pathological-events monitor.
+func TestCreateDedicatedHostCapacityRequeue(t *testing.T) {
+	ctx := context.TODO()
+	g := NewWithT(t)
+
+	awsCredentialsSecret := stubAwsCredentialsSecret()
+	g.Expect(k8sClient.Create(ctx, awsCredentialsSecret)).To(Succeed())
+	defer func() {
+		g.Expect(k8sClient.Delete(ctx, awsCredentialsSecret)).To(Succeed())
+	}()
+
+	userDataSecret := stubUserDataSecret()
+	g.Expect(k8sClient.Create(ctx, userDataSecret)).To(Succeed())
+	defer func() {
+		g.Expect(k8sClient.Delete(ctx, userDataSecret)).To(Succeed())
+	}()
+
+	machine, err := stubMachine()
+	g.Expect(err).ToNot(HaveOccurred())
+
+	machinePc, err := ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
+	g.Expect(err).ToNot(HaveOccurred())
+	machinePc.Placement.Host = &machinev1beta1.HostPlacement{
+		Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+		DedicatedHost: &machinev1beta1.DedicatedHost{
+			AllocationStrategy: ptr.To(AllocationStrategyDynamic),
+		},
+	}
+	encodedProviderConfig, err := RawExtensionFromProviderSpec(machinePc)
+	g.Expect(err).ToNot(HaveOccurred())
+	machine.Spec.ProviderSpec = machinev1beta1.ProviderSpec{Value: encodedProviderConfig}
+
+	// Clean up events to make sure we have a clean slate.
+	eventList := &v1.EventList{}
+	g.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+	for i := range eventList.Items {
+		g.Expect(k8sClient.Delete(ctx, &eventList.Items[i])).To(Succeed())
+	}
+
+	g.Expect(k8sClient.Create(ctx, machine)).To(Succeed())
+	defer func() {
+		g.Expect(k8sClient.Delete(ctx, machine)).To(Succeed())
+	}()
+
+	// Create infrastructure object
+	infra := &configv1.Infrastructure{ObjectMeta: metav1.ObjectMeta{Name: awsclient.GlobalInfrastuctureName}}
+	g.Expect(k8sClient.Create(ctx, infra)).To(Succeed())
+	defer func() {
+		g.Expect(k8sClient.Delete(ctx, infra)).To(Succeed())
+	}()
+
+	// Ensure the machine has synced to the cache
+	getMachine := func() error {
+		machineKey := types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}
+		return k8sClient.Get(ctx, machineKey, machine)
+	}
+	g.Expect(getMachine()).To(Succeed())
+
+	mockCtrl := gomock.NewController(t)
+	mockAWSClient := mockaws.NewMockClient(mockCtrl)
+	mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(nil, awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient dedicated host capacity", nil)).AnyTimes()
+
+	params := ActuatorParams{
+		Client:        k8sClient,
+		EventRecorder: eventRecorder,
+		AwsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+			return mockAWSClient, nil
+		},
+	}
+	actuator := NewActuator(params)
+
+	assertRequeueAfterError := func(err error) {
+		var requeueErr *machinecontroller.RequeueAfterError
+		g.Expect(errors.As(err, &requeueErr)).To(BeTrue())
+		g.Expect(requeueErr.RequeueAfter).To(Equal(dedicatedHostCapacityRequeueAfter))
+	}
+
+	// Both attempts hit the capacity shortage and requeue after a delay
+	// instead of returning an error (which would emit a FailedCreate event on
+	// every attempt).
+	assertRequeueAfterError(actuator.Create(ctx, machine))
+
+	// Pick up the machine as patched by the first attempt, like the machine
+	// controller would on the next reconcile.
+	g.Expect(getMachine()).To(Succeed())
+	assertRequeueAfterError(actuator.Create(ctx, machine))
+
+	// Exactly one distinct event is emitted for the whole shortage, with the
+	// dedicated reason rather than FailedCreate.
+	waitForEvent := func(g Gomega) error {
+		g.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+		if len(eventList.Items) != 1 {
+			return fmt.Errorf("Expected len 1, got %d", len(eventList.Items))
+		}
+		return nil
+	}
+	g.Eventually(waitForEvent, timeout).Should(Succeed())
+
+	g.Expect(eventList.Items[0].Reason).To(Equal(insufficientDedicatedHostCapacityEventReason))
+	g.Expect(eventList.Items[0].Type).To(Equal(v1.EventTypeWarning))
+	g.Expect(eventList.Items[0].Message).To(ContainSubstring(insufficientHostCapacityErrorCode))
+
+	// The persisted MachineCreation condition carries the distinct reason.
+	g.Expect(getMachine()).To(Succeed())
+	providerStatus, err := ProviderStatusFromRawExtension(machine.Status.ProviderStatus)
+	g.Expect(err).ToNot(HaveOccurred())
+	condition := findCondition(providerStatus.Conditions, string(machinev1beta1.MachineCreation))
+	g.Expect(condition).ToNot(BeNil())
+	g.Expect(condition.Reason).To(Equal(DedicatedHostCapacityUnavailableConditionReason))
+	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 }
 
 func TestHandleMachineErrors(t *testing.T) {

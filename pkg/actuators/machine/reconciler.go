@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,6 +25,11 @@ const (
 	requeueAfterSeconds      = 20
 	requeueAfterFatalSeconds = 180
 	masterLabel              = "node-role.kubernetes.io/master"
+	// dedicatedHostCapacityRequeueAfter is the delay before retrying machine
+	// creation while it is blocked by insufficient dedicated host capacity.
+	// AWS capacity droughts resolve on the order of minutes; retrying much
+	// faster only hammers the AllocateHosts API without speeding recovery.
+	dedicatedHostCapacityRequeueAfter = 60 * time.Second
 )
 
 // Reconciler runs the logic to reconciles a machine resource towards its desired state
@@ -100,9 +106,21 @@ func (r *Reconciler) create() error {
 	instance, allocatedHostID, err := launchInstance(r.machine, r.providerSpec, userData, r.awsClient, r.client, infra)
 	if err != nil {
 		klog.Errorf("%s: error creating machine: %v", r.machine.Name, err)
-		conditionFailed := conditionFailed()
-		conditionFailed.Message = err.Error()
-		r.machineScope.setProviderStatus(nil, conditionFailed)
+		condition := conditionFailed()
+		var capacityErr *insufficientHostCapacityError
+		if errors.As(err, &capacityErr) {
+			// A dedicated host capacity shortage is retryable and expected to
+			// resolve on its own, so use a distinct condition reason and the
+			// error's stable message. The message must be byte-identical on
+			// every attempt: it is persisted in the Machine status, and any
+			// variation would fire a watch event and requeue the controller
+			// immediately, defeating the requeue delay applied by the actuator.
+			condition.Reason = DedicatedHostCapacityUnavailableConditionReason
+			condition.Message = capacityErr.Error()
+		} else {
+			condition.Message = err.Error()
+		}
+		r.machineScope.setProviderStatus(nil, condition)
 		return fmt.Errorf("failed to launch instance: %w", err)
 	}
 

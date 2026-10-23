@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/golang/mock/gomock"
@@ -21,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -563,6 +565,117 @@ func TestCreate(t *testing.T) {
 		} else if *machineScope.providerStatus.InstanceID != instanceID {
 			t.Errorf("Expected InstanceID: %v, got: %v", instanceID, *machineScope.providerStatus.InstanceID)
 		}
+	}
+}
+
+// TestCreateDedicatedHostCapacityConditionStability is a regression guard for
+// the status-churn hot loop: while machine creation is blocked by an AWS
+// dedicated host capacity shortage, the MachineCreation condition must stay
+// byte-identical across retry attempts. The raw AWS error text varies between
+// attempts (the AZ hints differ), and persisting that variation used to fire a
+// watch event and immediately requeue the controller on every attempt,
+// defeating any requeue delay.
+func TestCreateDedicatedHostCapacityConditionStability(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	mockAWSClient := mockaws.NewMockClient(mockCtrl)
+
+	allocateAttempts := 0
+	mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).DoAndReturn(func(*ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+		allocateAttempts++
+		if allocateAttempts == 1 {
+			return nil, awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient capacity in this availability zone", nil)
+		}
+		// The second attempt carries a different AZ suggestion, as observed in
+		// real AWS responses.
+		return nil, awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient capacity in this availability zone. Try availability zone us-east-1b", nil)
+	}).AnyTimes()
+
+	mockAWSClient.EXPECT().DescribeInstances(gomock.Any()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
+
+	machine, err := stubMachine()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	machinePc, err := ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	machinePc.Placement.Host = &machinev1beta1.HostPlacement{
+		Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+		DedicatedHost: &machinev1beta1.DedicatedHost{
+			AllocationStrategy: ptr.To(AllocationStrategyDynamic),
+		},
+	}
+
+	encodedProviderConfig, err := RawExtensionFromProviderSpec(machinePc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	machine.Spec.ProviderSpec = machinev1beta1.ProviderSpec{Value: encodedProviderConfig}
+
+	fakeClient := fake.NewClientBuilder().WithRuntimeObjects(machine, stubAwsCredentialsSecret(), stubUserDataSecret(), stubInfraObject()).Build()
+
+	machineScope, err := newMachineScope(machineScopeParams{
+		client:  fakeClient,
+		machine: machine,
+		awsClientBuilder: func(client runtimeclient.Client, secretName, namespace, region string, configManagedClient runtimeclient.Client, regionCache awsclient.RegionCache) (awsclient.Client, error) {
+			return mockAWSClient, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reconciler := newReconciler(machineScope)
+
+	machineCreationCondition := func() metav1.Condition {
+		condition := findCondition(machineScope.providerStatus.Conditions, string(machinev1beta1.MachineCreation))
+		if condition == nil {
+			t.Fatalf("expected %s condition to be set", machinev1beta1.MachineCreation)
+		}
+		return *condition
+	}
+
+	// First attempt: create fails on the capacity shortage.
+	err = reconciler.create()
+	if err == nil {
+		t.Fatal("expected create to fail on insufficient host capacity")
+	}
+	var capacityErr *insufficientHostCapacityError
+	if !errors.As(err, &capacityErr) {
+		t.Fatalf("expected an insufficientHostCapacityError, got: %v", err)
+	}
+
+	condition := machineCreationCondition()
+	if condition.Reason != DedicatedHostCapacityUnavailableConditionReason {
+		t.Errorf("expected condition reason %q, got %q", DedicatedHostCapacityUnavailableConditionReason, condition.Reason)
+	}
+	if condition.Status != metav1.ConditionFalse {
+		t.Errorf("expected condition status %q, got %q", metav1.ConditionFalse, condition.Status)
+	}
+	firstMessage, firstTransitionTime := condition.Message, condition.LastTransitionTime
+
+	// Second attempt: create fails again, with different raw AWS error text.
+	err = reconciler.create()
+	if err == nil {
+		t.Fatal("expected second create to fail on insufficient host capacity")
+	}
+	if !errors.As(err, &capacityErr) {
+		t.Fatalf("expected an insufficientHostCapacityError, got: %v", err)
+	}
+
+	// The persisted condition must be byte-identical to the first attempt:
+	// any variation fires a watch event and requeues the controller
+	// immediately.
+	condition = machineCreationCondition()
+	if condition.Message != firstMessage {
+		t.Errorf("expected condition message to stay %q, got %q", firstMessage, condition.Message)
+	}
+	if !condition.LastTransitionTime.Equal(&firstTransitionTime) {
+		t.Errorf("expected condition LastTransitionTime to stay %v, got %v", firstTransitionTime, condition.LastTransitionTime)
 	}
 }
 

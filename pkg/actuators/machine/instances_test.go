@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	gmg "github.com/onsi/gomega"
 
 	"github.com/aws/aws-sdk-go/aws"
+	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
@@ -1310,6 +1312,61 @@ func TestLaunchInstance(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestLaunchInstanceDedicatedHostCapacityError verifies that a dynamic
+// dedicated host allocation failure due to insufficient AWS capacity surfaces
+// as a retryable typed error and is not misclassified as an invalid machine
+// configuration (which would terminally fail the Machine).
+func TestLaunchInstanceDedicatedHostCapacityError(t *testing.T) {
+	machine, err := stubMachine()
+	if err != nil {
+		t.Fatalf("Unable to build test machine manifest: %v", err)
+	}
+
+	providerConfig := stubProviderConfig()
+	providerConfig.Placement.Host = &machinev1beta1.HostPlacement{
+		Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+		DedicatedHost: &machinev1beta1.DedicatedHost{
+			AllocationStrategy: ptr.To(AllocationStrategyDynamic),
+		},
+	}
+
+	mockCtrl := gomock.NewController(t)
+	mockAWSClient := mockaws.NewMockClient(mockCtrl)
+
+	mockAWSClient.EXPECT().DescribeSecurityGroups(gomock.Any()).Return(&ec2.DescribeSecurityGroupsOutput{
+		SecurityGroups: []*ec2.SecurityGroup{
+			{GroupId: aws.String("groupID")},
+		},
+	}, nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutputDefault(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+	mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(&ec2.DescribeImagesOutput{}, nil).AnyTimes()
+	mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(nil, awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient dedicated host capacity", nil)).AnyTimes()
+
+	fakeClient := fake.NewFakeClient()
+
+	_, _, launchErr := launchInstance(machine, providerConfig, nil, mockAWSClient, fakeClient, nil)
+	if launchErr == nil {
+		t.Fatal("expected launchInstance to fail on insufficient dedicated host capacity")
+	}
+
+	var capacityErr *insufficientHostCapacityError
+	if !errors.As(launchErr, &capacityErr) {
+		t.Fatalf("expected an insufficientHostCapacityError, got: %v", launchErr)
+	}
+	if capacityErr.instanceType != providerConfig.InstanceType {
+		t.Errorf("expected instance type %q, got %q", providerConfig.InstanceType, capacityErr.instanceType)
+	}
+	if capacityErr.availabilityZone != providerConfig.Placement.AvailabilityZone {
+		t.Errorf("expected availability zone %q, got %q", providerConfig.Placement.AvailabilityZone, capacityErr.availabilityZone)
+	}
+
+	var machineErr *mapierrors.MachineError
+	if errors.As(launchErr, &machineErr) && machineErr.Reason == machinev1beta1.InvalidConfigurationMachineError {
+		t.Errorf("a capacity shortage must not be an invalid machine configuration: %v", launchErr)
 	}
 }
 

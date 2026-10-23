@@ -1,9 +1,12 @@
 package machine
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
@@ -241,6 +244,84 @@ func TestAllocateDedicatedHost(t *testing.T) {
 
 	if hostID != expectedHostID {
 		t.Errorf("expected host ID %s, got %s", expectedHostID, hostID)
+	}
+}
+
+func TestAllocateDedicatedHostInsufficientCapacity(t *testing.T) {
+	instanceType := "m5.large"
+	availabilityZone := "us-east-1a"
+
+	testCases := []struct {
+		name             string
+		allocateErr      error
+		expectTypedError bool
+	}{
+		{
+			name:             "awserr with InsufficientHostCapacity code",
+			allocateErr:      awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient dedicated host capacity in this availability zone", nil),
+			expectTypedError: true,
+		},
+		{
+			name:             "non-capacity awserr is wrapped generically",
+			allocateErr:      awserr.New("UnsupportedException", "something else went wrong", nil),
+			expectTypedError: false,
+		},
+		{
+			name:             "error message containing the InsufficientHostCapacity code",
+			allocateErr:      fmt.Errorf("an error occurred (%s) when calling the AllocateHosts operation: no capacity", insufficientHostCapacityErrorCode),
+			expectTypedError: true,
+		},
+	}
+
+	// The typed error's message is persisted in the Machine status condition
+	// and must not vary between attempts, no matter how the underlying AWS
+	// error text varies.
+	expectedMessage := fmt.Sprintf("%s: insufficient dedicated host capacity for instance type %s in availability zone %s, will retry",
+		insufficientHostCapacityErrorCode, instanceType, availabilityZone)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			mockAWSClient := mock.NewMockClient(mockCtrl)
+			mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(nil, tc.allocateErr)
+
+			hostID, err := allocateDedicatedHost(mockAWSClient, instanceType, availabilityZone, nil, "test-machine")
+			if hostID != "" {
+				t.Errorf("expected no host ID, got %q", hostID)
+			}
+			if err == nil {
+				t.Fatal("expected an error, got none")
+			}
+
+			var capacityErr *insufficientHostCapacityError
+			if errors.As(err, &capacityErr) != tc.expectTypedError {
+				t.Fatalf("expected typed capacity error: %v, got: %v", tc.expectTypedError, err)
+			}
+			if !tc.expectTypedError {
+				return
+			}
+
+			if capacityErr.instanceType != instanceType {
+				t.Errorf("expected instance type %q, got %q", instanceType, capacityErr.instanceType)
+			}
+			if capacityErr.availabilityZone != availabilityZone {
+				t.Errorf("expected availability zone %q, got %q", availabilityZone, capacityErr.availabilityZone)
+			}
+
+			if err.Error() != expectedMessage {
+				t.Errorf("expected message %q, got %q", expectedMessage, err.Error())
+			}
+			if again := newInsufficientHostCapacityError(tc.allocateErr, instanceType, availabilityZone); again.Error() != err.Error() {
+				t.Errorf("expected a stable message, got variation: %q vs %q", err.Error(), again.Error())
+			}
+
+			// The raw AWS error must remain reachable for logging.
+			if capacityErr.Unwrap() == nil || capacityErr.Unwrap().Error() != tc.allocateErr.Error() {
+				t.Errorf("expected Unwrap to return the AWS error, got %v", capacityErr.Unwrap())
+			}
+		})
 	}
 }
 

@@ -476,7 +476,9 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 
 		hostID, err := allocateDedicatedHost(awsClient, machineProviderConfig.InstanceType, availabilityZone, tags, machine.Name)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to allocate dedicated host: %w", err)
+			// allocateDedicatedHost already wraps its errors with the
+			// dedicated host context; return them as-is.
+			return nil, "", err
 		}
 		allocatedHostID = hostID
 		klog.Infof("Allocated dedicated host %s for machine %s", allocatedHostID, machine.Name)

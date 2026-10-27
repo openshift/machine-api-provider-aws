@@ -18,9 +18,12 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -35,6 +38,11 @@ const (
 	updateEventAction = "Update"
 	deleteEventAction = "Delete"
 	noEventAction     = ""
+	// dedicatedHostCapacityRequeueAfter is the delay before retrying machine
+	// creation while it is blocked by insufficient dedicated host capacity.
+	// AWS capacity droughts resolve on the order of minutes; retrying much
+	// faster only hammers the AllocateHosts API without speeding recovery.
+	dedicatedHostCapacityRequeueAfter = 60 * time.Second
 )
 
 // Actuator is responsible for performing machine reconciliation.
@@ -92,9 +100,40 @@ func (a *Actuator) Create(ctx context.Context, machine *machinev1beta1.Machine) 
 		return a.handleMachineError(machine, fmtErr, createEventAction)
 	}
 	defer scope.Close()
+
+	// create() mutates the provider status conditions in place, so the
+	// previous MachineCreation condition reason has to be captured before it
+	// runs; it is used to detect reason transitions and emit the dedicated
+	// host capacity event only once per shortage.
+	var prevMachineCreationReason string
+	if prevCondition := findCondition(scope.providerStatus.Conditions, string(machinev1beta1.MachineCreation)); prevCondition != nil {
+		prevMachineCreationReason = prevCondition.Reason
+	}
+
 	if err := newReconciler(scope).create(); err != nil {
 		if err := scope.patchMachine(); err != nil {
 			return err
+		}
+		var capacityErr *insufficientHostCapacityError
+		if errors.As(err, &capacityErr) {
+			// A dedicated host capacity shortage is retryable and expected to
+			// resolve on its own. Requeue after a delay instead of returning
+			// the error: an error would retry almost immediately (and would
+			// emit a FailedCreate event on every attempt, which during a
+			// multi-minute drought trips the pathological events monitor).
+			// The shortage is surfaced once per transition via a distinct
+			// event reason and via the DedicatedHostCapacityUnavailable
+			// provider status condition, which also keeps retry attempts from
+			// churning the Machine status.
+			// Note: if the process restarts mid-shortage the event is not
+			// re-emitted; the raw AWS error is still logged on every attempt.
+			if prevMachineCreationReason != DedicatedHostCapacityUnavailableConditionReason {
+				a.eventRecorder.Eventf(machine, corev1.EventTypeWarning, insufficientDedicatedHostCapacityEventReason,
+					"%v (AWS: %v)", capacityErr, capacityErr.Unwrap())
+			}
+			klog.Infof("%s: machine creation blocked by dedicated host capacity, requeueing in %s: %v",
+				machine.GetName(), dedicatedHostCapacityRequeueAfter, capacityErr)
+			return &machinecontroller.RequeueAfterError{RequeueAfter: dedicatedHostCapacityRequeueAfter}
 		}
 		fmtErr := fmt.Errorf(reconcilerFailFmt, machine.GetName(), createEventAction, err)
 		return a.handleMachineError(machine, fmtErr, createEventAction)

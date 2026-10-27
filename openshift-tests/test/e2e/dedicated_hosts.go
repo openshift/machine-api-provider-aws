@@ -505,8 +505,17 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 					suggestedAZs := parseAZSuggestions(detail+" "+recentMachineEvents(ctx, kubeClient, machineName),
 						region, candidate.availabilityZone)
 					candidates = reorderRemainingCandidates(candidates, i, suggestedAZs)
-					// Never got an instance: no node to wait for.
-					deleteMachineAndWait(ctx, client, machineName, machineDeleteTimeout)
+					// The drought confirmation only means no instance ID had
+					// appeared as of the last read; creation can still complete
+					// in the gap before cleanup runs here. Re-check immediately
+					// so a late-arriving instance gets the full node-aware
+					// cleanup instead of the short, no-node path.
+					if lateCheck, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{}); err == nil && machineInstanceID(lateCheck) != "" {
+						GinkgoWriter.Printf("Machine %s got an instance after the drought was confirmed; using full cleanup\n", machineName)
+						cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+					} else {
+						deleteMachineAndWait(ctx, client, machineName, machineDeleteTimeout)
+					}
 				case capacityWaitMachineFailed:
 					Fail(fmt.Sprintf("machine %s terminally failed: %s", machineName, detail))
 				case capacityWaitMachineGone:
@@ -1197,64 +1206,117 @@ func machineCapacityBlocked(m *machinev1beta1.Machine) (bool, string) {
 	return false, ""
 }
 
+// machinePoll is the classification of a single machine Get, shared by the
+// main polling loop and the drought-confirmation re-check so both apply the
+// same state handling.
+type machinePoll struct {
+	instanceID string
+	blocked    bool
+	message    string
+	failed     bool
+	gone       bool
+	detail     string
+	err        error
+}
+
+// pollMachineOnce fetches the machine once and classifies the result.
+func pollMachineOnce(ctx context.Context, client *machineclient.MachineV1beta1Client, machineName string) machinePoll {
+	m, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return machinePoll{gone: true, detail: fmt.Sprintf("machine %s not found", machineName)}
+	}
+	if err != nil {
+		return machinePoll{err: err}
+	}
+	if instanceID := machineInstanceID(m); instanceID != "" {
+		return machinePoll{instanceID: instanceID}
+	}
+	if m.Status.Phase != nil && *m.Status.Phase == machinev1beta1.PhaseFailed {
+		detail := "no error message"
+		if m.Status.ErrorMessage != nil {
+			detail = *m.Status.ErrorMessage
+		}
+		return machinePoll{failed: true, detail: detail}
+	}
+	if blocked, message := machineCapacityBlocked(m); blocked {
+		return machinePoll{blocked: true, message: message}
+	}
+	return machinePoll{}
+}
+
 // waitForMachineInstanceIDOrCapacitySignal waits for the machine to get an
 // instance, but also watches for the machine creation being blocked by
 // insufficient dedicated host capacity. It returns as soon as the instance
 // appears, the capacity shortage has persisted for capacityDroughtGrace (so
 // the caller can fall back to another availability zone), or the machine
 // terminally failed; otherwise it waits until the deadline (slow allocation).
+//
+// The deadline bounds a derived context used for both the Get calls and the
+// poll interval wait, so an in-flight request or sleep cannot outlive the
+// allocation budget; the caller's own context is left untouched for any
+// cleanup it performs afterwards.
 func waitForMachineInstanceIDOrCapacitySignal(ctx context.Context, client *machineclient.MachineV1beta1Client, machineName string, deadline time.Time) (string, capacityWaitResult, string) {
-	var capacityFirstSeen time.Time
-	var capacityMessage string
+	waitCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 
-	for time.Now().Before(deadline) {
-		m, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return "", capacityWaitMachineGone, fmt.Sprintf("machine %s not found", machineName)
-		}
-		if err != nil {
+	var capacityFirstSeen time.Time
+
+	for {
+		poll := pollMachineOnce(waitCtx, client, machineName)
+		switch {
+		case poll.gone:
+			return "", capacityWaitMachineGone, poll.detail
+		case poll.instanceID != "":
+			return poll.instanceID, capacityWaitInstanceReady, ""
+		case poll.failed:
+			return "", capacityWaitMachineFailed, poll.detail
+		case poll.err != nil:
 			// Transient API error, keep polling.
-			GinkgoWriter.Printf("Error getting machine %s (will retry): %v\n", machineName, err)
-		} else if instanceID := machineInstanceID(m); instanceID != "" {
-			return instanceID, capacityWaitInstanceReady, ""
-		} else if m.Status.Phase != nil && *m.Status.Phase == machinev1beta1.PhaseFailed {
-			// Fail fast instead of burning the whole budget on a machine that
-			// will never provision.
-			detail := "no error message"
-			if m.Status.ErrorMessage != nil {
-				detail = *m.Status.ErrorMessage
-			}
-			return "", capacityWaitMachineFailed, detail
-		} else if blocked, message := machineCapacityBlocked(m); blocked {
+			GinkgoWriter.Printf("Error getting machine %s (will retry): %v\n", machineName, poll.err)
+		case poll.blocked:
 			if capacityFirstSeen.IsZero() {
 				capacityFirstSeen = time.Now()
-				capacityMessage = message
-				GinkgoWriter.Printf("Machine %s creation blocked by insufficient dedicated host capacity: %s\n", machineName, message)
+				GinkgoWriter.Printf("Machine %s creation blocked by insufficient dedicated host capacity: %s\n", machineName, poll.message)
 			}
 			if time.Since(capacityFirstSeen) >= capacityDroughtGrace {
-				// One final re-check: a requeue landing right at the
-				// drought-confirm boundary may have just succeeded.
-				if m, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{}); err == nil {
-					if instanceID := machineInstanceID(m); instanceID != "" {
-						return instanceID, capacityWaitInstanceReady, ""
-					}
+				// One final re-check, classified the same way: a requeue
+				// landing right at the drought-confirm boundary may have
+				// just succeeded, failed terminally, or disappeared.
+				final := pollMachineOnce(waitCtx, client, machineName)
+				switch {
+				case final.instanceID != "":
+					return final.instanceID, capacityWaitInstanceReady, ""
+				case final.gone:
+					return "", capacityWaitMachineGone, final.detail
+				case final.failed:
+					return "", capacityWaitMachineFailed, final.detail
+				case final.blocked:
+					return "", capacityWaitDroughtConfirmed, final.message
+				case final.err != nil:
+					// Don't confirm a drought on a transient error; keep the
+					// grace clock running and try again.
+					GinkgoWriter.Printf("Error on final capacity re-check for machine %s (will retry): %v\n", machineName, final.err)
+				default:
+					// The capacity signal cleared between reads; restart the
+					// grace clock if it reappears.
+					capacityFirstSeen = time.Time{}
 				}
-				return "", capacityWaitDroughtConfirmed, capacityMessage
 			}
-		} else {
+		default:
 			// The signal disappeared (e.g. the condition changed); restart the
 			// grace clock if it reappears.
 			capacityFirstSeen = time.Time{}
-			capacityMessage = ""
 		}
 
 		select {
-		case <-ctx.Done():
-			return "", capacityWaitTimeout, ctx.Err().Error()
+		case <-waitCtx.Done():
+			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+				return "", capacityWaitTimeout, fmt.Sprintf("machine %s still has no instance", machineName)
+			}
+			return "", capacityWaitTimeout, waitCtx.Err().Error()
 		case <-time.After(capacityPollInterval):
 		}
 	}
-	return "", capacityWaitTimeout, fmt.Sprintf("machine %s still has no instance", machineName)
 }
 
 // deleteMachineAndWait deletes a machine and waits for it to disappear. Unlike

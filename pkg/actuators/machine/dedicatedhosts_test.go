@@ -196,88 +196,51 @@ func TestGetDynamicHostTags(t *testing.T) {
 }
 
 func TestAllocateDedicatedHost(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	mockAWSClient := mock.NewMockClient(mockCtrl)
-
 	instanceType := "m5.large"
 	availabilityZone := "us-east-1a"
-	tags := []*ec2.Tag{
+	machineName := "test-machine"
+	successTags := []*ec2.Tag{
 		{Key: aws.String("test-key"), Value: aws.String("test-value")},
 		{Key: aws.String("openshiftClusterID"), Value: aws.String("test-cluster")},
 	}
-	machineName := "test-machine"
-
 	expectedHostID := "h-1234567890abcdef0"
 
-	mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).DoAndReturn(func(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
-		if *input.InstanceType != instanceType {
-			t.Errorf("expected instance type %s, got %s", instanceType, *input.InstanceType)
-		}
-		if *input.AvailabilityZone != availabilityZone {
-			t.Errorf("expected availability zone %s, got %s", availabilityZone, *input.AvailabilityZone)
-		}
-		if *input.Quantity != 1 {
-			t.Errorf("expected quantity 1, got %d", *input.Quantity)
-		}
-		if *input.AutoPlacement != "off" {
-			t.Errorf("expected auto placement off, got %s", *input.AutoPlacement)
-		}
-
-		// Verify tags were passed correctly
-		if len(input.TagSpecifications) > 0 {
-			if len(input.TagSpecifications[0].Tags) != len(tags) {
-				t.Errorf("expected %d tags, got %d", len(tags), len(input.TagSpecifications[0].Tags))
-			}
-		}
-
-		return &ec2.AllocateHostsOutput{
-			HostIds: []*string{aws.String(expectedHostID)},
-		}, nil
-	})
-
-	hostID, err := allocateDedicatedHost(mockAWSClient, instanceType, availabilityZone, tags, machineName)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if hostID != expectedHostID {
-		t.Errorf("expected host ID %s, got %s", expectedHostID, hostID)
-	}
-}
-
-func TestAllocateDedicatedHostInsufficientCapacity(t *testing.T) {
-	instanceType := "m5.large"
-	availabilityZone := "us-east-1a"
+	// The typed error's message is persisted in the Machine status condition
+	// and must not vary between attempts, no matter how the underlying AWS
+	// error text varies.
+	expectedCapacityMessage := fmt.Sprintf("%s: insufficient dedicated host capacity for instance type %s in availability zone %s, will retry",
+		insufficientHostCapacityErrorCode, instanceType, availabilityZone)
 
 	testCases := []struct {
 		name             string
+		tags             []*ec2.Tag
 		allocateErr      error
+		expectErr        bool
 		expectTypedError bool
 	}{
 		{
+			name: "successful allocation",
+			tags: successTags,
+		},
+		{
 			name:             "awserr with InsufficientHostCapacity code",
 			allocateErr:      awserr.New(insufficientHostCapacityErrorCode, "We currently do not have sufficient dedicated host capacity in this availability zone", nil),
+			expectErr:        true,
 			expectTypedError: true,
 		},
 		{
 			name:             "non-capacity awserr is wrapped generically",
 			allocateErr:      awserr.New("UnsupportedException", "something else went wrong", nil),
+			expectErr:        true,
 			expectTypedError: false,
 		},
 		{
 			name:             "error message containing the InsufficientHostCapacity code",
 			allocateErr:      fmt.Errorf("an error occurred (%s) when calling the AllocateHosts operation: no capacity", insufficientHostCapacityErrorCode),
+			expectErr:        true,
 			expectTypedError: true,
 		},
 	}
-
-	// The typed error's message is persisted in the Machine status condition
-	// and must not vary between attempts, no matter how the underlying AWS
-	// error text varies.
-	expectedMessage := fmt.Sprintf("%s: insufficient dedicated host capacity for instance type %s in availability zone %s, will retry",
-		insufficientHostCapacityErrorCode, instanceType, availabilityZone)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -285,9 +248,49 @@ func TestAllocateDedicatedHostInsufficientCapacity(t *testing.T) {
 			defer mockCtrl.Finish()
 
 			mockAWSClient := mock.NewMockClient(mockCtrl)
-			mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(nil, tc.allocateErr)
 
-			hostID, err := allocateDedicatedHost(mockAWSClient, instanceType, availabilityZone, nil, "test-machine")
+			if tc.allocateErr != nil {
+				mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(nil, tc.allocateErr)
+			} else {
+				mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).DoAndReturn(func(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+					if *input.InstanceType != instanceType {
+						t.Errorf("expected instance type %s, got %s", instanceType, *input.InstanceType)
+					}
+					if *input.AvailabilityZone != availabilityZone {
+						t.Errorf("expected availability zone %s, got %s", availabilityZone, *input.AvailabilityZone)
+					}
+					if *input.Quantity != 1 {
+						t.Errorf("expected quantity 1, got %d", *input.Quantity)
+					}
+					if *input.AutoPlacement != "off" {
+						t.Errorf("expected auto placement off, got %s", *input.AutoPlacement)
+					}
+
+					// Verify tags were passed correctly
+					if len(input.TagSpecifications) > 0 {
+						if len(input.TagSpecifications[0].Tags) != len(tc.tags) {
+							t.Errorf("expected %d tags, got %d", len(tc.tags), len(input.TagSpecifications[0].Tags))
+						}
+					}
+
+					return &ec2.AllocateHostsOutput{
+						HostIds: []*string{aws.String(expectedHostID)},
+					}, nil
+				})
+			}
+
+			hostID, err := allocateDedicatedHost(mockAWSClient, instanceType, availabilityZone, tc.tags, machineName)
+
+			if !tc.expectErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if hostID != expectedHostID {
+					t.Errorf("expected host ID %s, got %s", expectedHostID, hostID)
+				}
+				return
+			}
+
 			if hostID != "" {
 				t.Errorf("expected no host ID, got %q", hostID)
 			}
@@ -310,8 +313,8 @@ func TestAllocateDedicatedHostInsufficientCapacity(t *testing.T) {
 				t.Errorf("expected availability zone %q, got %q", availabilityZone, capacityErr.availabilityZone)
 			}
 
-			if err.Error() != expectedMessage {
-				t.Errorf("expected message %q, got %q", expectedMessage, err.Error())
+			if err.Error() != expectedCapacityMessage {
+				t.Errorf("expected message %q, got %q", expectedCapacityMessage, err.Error())
 			}
 			if again := newInsufficientHostCapacityError(tc.allocateErr, instanceType, availabilityZone); again.Error() != err.Error() {
 				t.Errorf("expected a stable message, got variation: %q vs %q", err.Error(), again.Error())

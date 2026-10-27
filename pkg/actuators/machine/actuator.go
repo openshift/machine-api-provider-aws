@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	machinecontroller "github.com/openshift/machine-api-operator/pkg/controller/machine"
@@ -37,6 +38,11 @@ const (
 	updateEventAction = "Update"
 	deleteEventAction = "Delete"
 	noEventAction     = ""
+	// dedicatedHostCapacityRequeueAfter is the delay before retrying machine
+	// creation while it is blocked by insufficient dedicated host capacity.
+	// AWS capacity droughts resolve on the order of minutes; retrying much
+	// faster only hammers the AllocateHosts API without speeding recovery.
+	dedicatedHostCapacityRequeueAfter = 60 * time.Second
 )
 
 // Actuator is responsible for performing machine reconciliation.

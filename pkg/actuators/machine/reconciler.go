@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -101,7 +102,19 @@ func (r *Reconciler) create() error {
 	if err != nil {
 		klog.Errorf("%s: error creating machine: %v", r.machine.Name, err)
 		conditionFailed := conditionFailed()
-		conditionFailed.Message = err.Error()
+		var capacityErr *insufficientHostCapacityError
+		if errors.As(err, &capacityErr) {
+			// A dedicated host capacity shortage is retryable and expected to
+			// resolve on its own, so use a distinct condition reason and the
+			// error's stable message. The message must be byte-identical on
+			// every attempt: it is persisted in the Machine status, and any
+			// variation would fire a watch event and requeue the controller
+			// immediately, defeating the requeue delay applied by the actuator.
+			conditionFailed.Reason = DedicatedHostCapacityUnavailableConditionReason
+			conditionFailed.Message = capacityErr.Error()
+		} else {
+			conditionFailed.Message = err.Error()
+		}
 		r.machineScope.setProviderStatus(nil, conditionFailed)
 		return fmt.Errorf("failed to launch instance: %w", err)
 	}

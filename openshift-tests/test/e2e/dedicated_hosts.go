@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -419,101 +421,119 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 		})
 
 		It("should create a machine with dynamic dedicated host allocation", ginkgo.Informing(), func() {
-			machineSets, err := machineutil.GetMachineSets(kubeConfig)
+			// AWS dedicated host capacity is scarce and droughts are
+			// transient: allocation has been observed to succeed ~16 minutes
+			// into a shortage, after the fixed wait used to give up. Instead
+			// of pinning the machine to a single availability zone derived
+			// from one machineset, try the cluster's worker machineset zones
+			// in turn: wait for the instance on each candidate, fall back to
+			// the next zone when a capacity drought is confirmed there, and
+			// fail fast only once every candidate is dry. The fallback stays
+			// within the cluster region and uses only zones for which a
+			// worker machineset (and thus a coherent subnet and instance
+			// type) exists.
+			candidates := listAZCandidates(kubeConfig)
+			Expect(candidates).NotTo(BeEmpty(), "no machineset found to use as template")
+
+			region, err := getRegionFromMachineSet(candidates[0].machineSet)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Find a machineset to use as template (preferably one without dedicated hosts to avoid conflicts)
-			var templateMS *machinev1beta1.MachineSet
-			for i := range machineSets.Items {
-				ms := &machineSets.Items[i]
-				if ms.Spec.Replicas != nil && *ms.Spec.Replicas > 0 {
-					templateMS = ms
-					break
-				}
-			}
-			Expect(templateMS).NotTo(BeNil(), "no machineset found to use as template")
-
-			// Get the provider spec from the template
-			templateProviderSpec, err := machine.ProviderSpecFromRawExtension(templateMS.Spec.Template.Spec.ProviderSpec.Value)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Create a new provider spec with dynamic dedicated host allocation
-			newProviderSpec := templateProviderSpec.DeepCopy()
-
-			// Configure for dynamic dedicated host allocation
-			allocationStrategy := machinev1beta1.AllocationStrategyDynamic
-			affinity := machinev1beta1.HostAffinityDedicatedHost
-			newProviderSpec.Placement.Tenancy = machinev1beta1.HostTenancy
-			newProviderSpec.Placement.Host = &machinev1beta1.HostPlacement{
-				Affinity: &affinity,
-				DedicatedHost: &machinev1beta1.DedicatedHost{
-					AllocationStrategy: &allocationStrategy,
-					DynamicHostAllocation: &machinev1beta1.DynamicHostAllocationSpec{
-						Tags: &[]machinev1beta1.TagSpecification{
-							{
-								Name:  "e2e-test",
-								Value: "dynamic-dedicated-host",
-							},
-						},
-					},
-				},
-			}
-
-			// Marshal the new provider spec
-			newProviderSpecRaw, err := json.Marshal(newProviderSpec)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Get infrastructure to build machine name
 			infra := machineutil.LoadInfra(kubeConfig)
-
-			// Create unique machine name
-			machineName := fmt.Sprintf("%s-dynamic-dh-test-%d", infra.Status.InfrastructureName, time.Now().Unix())
-
-			// Build the machine object
-			testMachine := &machinev1beta1.Machine{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      machineName,
-					Namespace: machineutil.MachineAPINamespace,
-					Labels: map[string]string{
-						"machine.openshift.io/cluster-api-cluster": infra.Status.InfrastructureName,
-						"e2e-test": "dynamic-dedicated-host",
-					},
-				},
-				Spec: machinev1beta1.MachineSpec{
-					ProviderSpec: machinev1beta1.ProviderSpec{
-						Value: &runtime.RawExtension{
-							Raw: newProviderSpecRaw,
-						},
-					},
-				},
-			}
-
-			By("Creating machine with dynamic dedicated host allocation")
-			GinkgoWriter.Printf("Creating machine %s with dynamic dedicated host allocation\n", machineName)
 			client, err := machineclient.NewForConfig(kubeConfig)
 			Expect(err).NotTo(HaveOccurred())
 
-			createdMachine, err := client.Machines(machineutil.MachineAPINamespace).Create(ctx, testMachine, metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(createdMachine).NotTo(BeNil())
+			overallDeadline := time.Now().Add(dynamicHostOverallTimeout)
 
+			// Mutable cleanup state shared with the deferred cleanup: whatever
+			// attempt's machine is current when the test exits gets cleaned
+			// up. A machine that never got an instance cannot have a node, so
+			// its cleanup skips the node waits (including the 5-minute
+			// late-registering-node poll) that the full cleanup performs.
+			currentMachineName := ""
+			instanceEverSeen := false
 			cleanupComplete := false
-			// Register cleanup immediately after successful creation in case test fails before the manual cleanup
 			DeferCleanup(func() {
-				if !cleanupComplete {
-					cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+				if cleanupComplete || currentMachineName == "" {
+					return
 				}
+				if instanceEverSeen {
+					cleanupMachineAndNode(ctx, kubeConfig, kubeClient, currentMachineName)
+					return
+				}
+				deleteMachineAndWait(ctx, client, currentMachineName, machineDeleteTimeout)
 			})
 
-			var dynamicHostID string
+			var instanceID string
 
-			By("Waiting for machine to have a running instance")
-			instanceID := waitForMachineInstanceID(ctx, client, machineName)
+			for i := 0; i < len(candidates); i++ {
+				candidate := candidates[i]
+				machineName := fmt.Sprintf("%s-dynamic-dh-test-%d-%d", infra.Status.InfrastructureName, i, time.Now().Unix())
+				currentMachineName = machineName
+
+				testMachine := buildDynamicHostMachine(candidate.machineSet, infra.Status.InfrastructureName, machineName)
+
+				By(fmt.Sprintf("Creating machine %s with dynamic dedicated host allocation in availability zone %s (candidate %d of %d)",
+					machineName, candidate.availabilityZone, i+1, len(candidates)))
+				GinkgoWriter.Printf("Creating machine %s with dynamic dedicated host allocation using machineset %s as template\n",
+					machineName, candidate.machineSet.Name)
+				_, err := client.Machines(machineutil.MachineAPINamespace).Create(ctx, testMachine, metav1.CreateOptions{})
+				Expect(err).NotTo(HaveOccurred())
+
+				var result capacityWaitResult
+				var detail string
+				instanceID, result, detail = waitForMachineInstanceIDOrCapacitySignal(ctx, client, machineName, overallDeadline)
+
+				switch result {
+				case capacityWaitInstanceReady:
+					instanceEverSeen = true
+				case capacityWaitDroughtConfirmed:
+					GinkgoWriter.Printf("Machine %s blocked by insufficient dedicated host capacity in %s for over %s: %s\n",
+						machineName, candidate.availabilityZone, capacityDroughtGrace, detail)
+					if i == len(candidates)-1 {
+						var zones []string
+						for _, c := range candidates {
+							zones = append(zones, c.availabilityZone)
+						}
+						Fail(fmt.Sprintf("InsufficientHostCapacity confirmed in all candidate availability zones %v; last signal: %s", zones, detail))
+					}
+					// Prefer zones AWS suggested as alternatives, then the
+					// remaining candidates. Suggestions come from the machine
+					// status condition (which carries the raw AWS error text
+					// on actuators predating the distinct capacity condition)
+					// and from the machine's events (which carry it on newer
+					// actuators, where the condition message is stable).
+					suggestedAZs := parseAZSuggestions(detail+" "+recentMachineEvents(ctx, kubeClient, machineName),
+						region, candidate.availabilityZone)
+					candidates = reorderRemainingCandidates(candidates, i, suggestedAZs)
+					// The drought confirmation only means no instance ID had
+					// appeared as of the last read; creation can still complete
+					// in the gap before cleanup runs here. Re-check immediately
+					// so a late-arriving instance gets the full node-aware
+					// cleanup instead of the short, no-node path.
+					if lateCheck, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{}); err == nil && machineInstanceID(lateCheck) != "" {
+						GinkgoWriter.Printf("Machine %s got an instance after the drought was confirmed; using full cleanup\n", machineName)
+						cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+					} else {
+						deleteMachineAndWait(ctx, client, machineName, machineDeleteTimeout)
+					}
+				case capacityWaitMachineFailed:
+					Fail(fmt.Sprintf("machine %s terminally failed: %s", machineName, detail))
+				case capacityWaitMachineGone:
+					Fail(fmt.Sprintf("machine %s disappeared while waiting for its instance: %s", machineName, detail))
+				default: // capacityWaitTimeout
+					Fail(fmt.Sprintf("timed out after %s waiting for machine %s to get an instance in availability zone %s (no capacity shortage signal observed): %s",
+						dynamicHostOverallTimeout, machineName, candidate.availabilityZone, detail))
+				}
+
+				if result == capacityWaitInstanceReady {
+					break
+				}
+			}
 
 			GinkgoWriter.Printf("Machine created with instance ID: %s\n", instanceID)
 
 			By("Verifying the machine status has dedicated host ID populated")
-			dynamicHostID = waitForMachineDedicatedHostID(ctx, client, machineName, "")
+			dynamicHostID := waitForMachineDedicatedHostID(ctx, client, currentMachineName, "")
 			GinkgoWriter.Printf("Dynamic dedicated host allocated with ID: %s\n", dynamicHostID)
 			Expect(dynamicHostID).To(MatchRegexp("^h-([0-9a-f]{8}|[0-9a-f]{17})$"), "host ID should match expected format")
 
@@ -545,7 +565,7 @@ var _ = Describe("[sig-cluster-lifecycle][OCPFeatureGate:AWSDedicatedHosts][plat
 			Expect(state).To(Equal("available"), "dedicated host should be available")
 
 			// Manually trigger cleanup before verifying host release
-			cleanupMachineAndNode(ctx, kubeConfig, kubeClient, machineName)
+			cleanupMachineAndNode(ctx, kubeConfig, kubeClient, currentMachineName)
 			cleanupComplete = true
 
 			By("Verifying dynamically allocated host is released after cleanup")
@@ -981,6 +1001,419 @@ func waitForMachineDedicatedHostID(ctx context.Context, client *machineclient.Ma
 		return true
 	}, defaultTestTimeout, defaultPollingInterval).Should(BeTrue())
 	return actualHostID
+}
+
+// azCandidate is an availability zone the dynamic dedicated host test can
+// allocate a host in, together with a template machineset whose provider spec
+// (instance type, AMI, subnet, security groups, ...) is coherent with that
+// zone: a host allocated in an AZ requires the instance's subnet to be in the
+// same AZ, so both always come from the same machineset.
+type azCandidate struct {
+	availabilityZone string
+	machineSet       *machinev1beta1.MachineSet
+}
+
+const (
+	// maxAZCandidates bounds the AZ fallback loop of the dynamic dedicated
+	// host test: by the time three zones are all dry, the shortage is
+	// region-wide and trying more zones only burns CI budget.
+	maxAZCandidates = 3
+
+	// dynamicHostOverallTimeout bounds the whole dynamic dedicated host
+	// allocation test, including any AZ fallback attempts. The historical
+	// single-AZ behavior waited 10m for the instance (plus up to 5m of
+	// cleanup-side node polling); observed AWS droughts resolved after ~16m,
+	// so the overall budget is set above the instance wait to absorb one
+	// quick fallback while keeping the worst case bounded.
+	dynamicHostOverallTimeout = 12 * time.Minute
+
+	// capacityDroughtGrace is how long machine creation has to stay blocked
+	// by an InsufficientHostCapacity signal before the AZ is considered dry
+	// and the test falls back to another one. It is deliberately longer than
+	// the actuator's dedicated host capacity requeue delay (60s) so a requeue
+	// landing right as a drought clears can still succeed within the grace
+	// period instead of triggering a spurious AZ switch.
+	capacityDroughtGrace = 120 * time.Second
+
+	// capacityPollInterval is the polling interval of the capacity-aware
+	// machine wait. It is shorter than defaultPollingInterval so a drought is
+	// confirmed (and the AZ fallback decision made) promptly.
+	capacityPollInterval = 10 * time.Second
+
+	// machineDeleteTimeout bounds the delete of a machine that never got an
+	// instance: such machines are finalized within seconds, so anything
+	// longer indicates a stuck deletion worth failing on.
+	machineDeleteTimeout = 2 * time.Minute
+)
+
+// listAZCandidates returns up to maxAZCandidates availability zones to try
+// dynamic dedicated host allocation in, each with a template machineset.
+// Machinesets with running replicas and without a host placement make the
+// cleanest templates (their subnets, instance types and AMIs are known-good
+// and uncontended), so they are preferred; other machinesets are still viable
+// templates since the host placement is replaced by the test. Zones appear at
+// most once, and the first candidate is what the single-template selection
+// used to pick on clusters with a mix of machinesets.
+func listAZCandidates(kubeConfig *rest.Config) []azCandidate {
+	machineSets, err := machineutil.GetMachineSets(kubeConfig)
+	Expect(err).NotTo(HaveOccurred())
+
+	type templateMachineSet struct {
+		machineSet *machinev1beta1.MachineSet
+		zone       string
+		preferred  bool
+	}
+	templates := make([]templateMachineSet, 0, len(machineSets.Items))
+	for i := range machineSets.Items {
+		ms := &machineSets.Items[i]
+		providerSpec, err := machine.ProviderSpecFromRawExtension(ms.Spec.Template.Spec.ProviderSpec.Value)
+		Expect(err).NotTo(HaveOccurred())
+
+		zone := providerSpec.Placement.AvailabilityZone
+		if zone == "" {
+			// Without an AZ the dynamic allocation would have to derive one
+			// from the subnet, which this fallback does not model.
+			continue
+		}
+		preferred := ms.Spec.Replicas != nil && *ms.Spec.Replicas > 0 && providerSpec.Placement.Host == nil
+		templates = append(templates, templateMachineSet{machineSet: ms, zone: zone, preferred: preferred})
+	}
+
+	// Stable partition: preferred templates first, original API order within
+	// each group.
+	sort.SliceStable(templates, func(i, j int) bool { return templates[i].preferred && !templates[j].preferred })
+
+	candidates := make([]azCandidate, 0, maxAZCandidates)
+	seenZones := make(map[string]bool)
+	for _, template := range templates {
+		if seenZones[template.zone] {
+			continue
+		}
+		seenZones[template.zone] = true
+		candidates = append(candidates, azCandidate{availabilityZone: template.zone, machineSet: template.machineSet})
+		if len(candidates) == maxAZCandidates {
+			break
+		}
+	}
+	return candidates
+}
+
+// buildDynamicHostMachine builds a Machine that asks the actuator to
+// dynamically allocate a dedicated host, using the given machineset's provider
+// spec as the template. The template's own host placement, if any, is replaced
+// by the dynamic allocation configuration.
+func buildDynamicHostMachine(templateMS *machinev1beta1.MachineSet, infrastructureName, machineName string) *machinev1beta1.Machine {
+	templateProviderSpec, err := machine.ProviderSpecFromRawExtension(templateMS.Spec.Template.Spec.ProviderSpec.Value)
+	Expect(err).NotTo(HaveOccurred())
+
+	newProviderSpec := templateProviderSpec.DeepCopy()
+
+	// Configure for dynamic dedicated host allocation
+	allocationStrategy := machinev1beta1.AllocationStrategyDynamic
+	affinity := machinev1beta1.HostAffinityDedicatedHost
+	newProviderSpec.Placement.Tenancy = machinev1beta1.HostTenancy
+	newProviderSpec.Placement.Host = &machinev1beta1.HostPlacement{
+		Affinity: &affinity,
+		DedicatedHost: &machinev1beta1.DedicatedHost{
+			AllocationStrategy: &allocationStrategy,
+			DynamicHostAllocation: &machinev1beta1.DynamicHostAllocationSpec{
+				Tags: &[]machinev1beta1.TagSpecification{
+					{
+						Name:  "e2e-test",
+						Value: "dynamic-dedicated-host",
+					},
+				},
+			},
+		},
+	}
+
+	newProviderSpecRaw, err := json.Marshal(newProviderSpec)
+	Expect(err).NotTo(HaveOccurred())
+
+	return &machinev1beta1.Machine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      machineName,
+			Namespace: machineutil.MachineAPINamespace,
+			Labels: map[string]string{
+				"machine.openshift.io/cluster-api-cluster": infrastructureName,
+				"e2e-test": "dynamic-dedicated-host",
+			},
+		},
+		Spec: machinev1beta1.MachineSpec{
+			ProviderSpec: machinev1beta1.ProviderSpec{
+				Value: &runtime.RawExtension{
+					Raw: newProviderSpecRaw,
+				},
+			},
+		},
+	}
+}
+
+// capacityWaitResult is what waitForMachineInstanceIDOrCapacitySignal observed.
+type capacityWaitResult int
+
+const (
+	// capacityWaitInstanceReady: the machine has an instance.
+	capacityWaitInstanceReady capacityWaitResult = iota
+	// capacityWaitDroughtConfirmed: machine creation stayed blocked by
+	// insufficient dedicated host capacity for at least the grace period.
+	capacityWaitDroughtConfirmed
+	// capacityWaitTimeout: the deadline expired without a confirmed drought.
+	capacityWaitTimeout
+	// capacityWaitMachineFailed: the machine terminally failed.
+	capacityWaitMachineFailed
+	// capacityWaitMachineGone: the machine disappeared while waiting.
+	capacityWaitMachineGone
+)
+
+// machineInstanceID returns the instance ID from the machine's provider
+// status, or "" if it is not set (yet).
+func machineInstanceID(m *machinev1beta1.Machine) string {
+	if m.Status.ProviderStatus == nil {
+		return ""
+	}
+	providerStatus, err := ProviderStatusFromRawExtension(m.Status.ProviderStatus)
+	if err != nil || providerStatus.InstanceID == nil {
+		return ""
+	}
+	return *providerStatus.InstanceID
+}
+
+// machineCapacityBlocked reports whether machine creation is currently blocked
+// by insufficient dedicated host capacity, and the message carrying the
+// signal. It matches the DedicatedHostCapacityUnavailable condition reason set
+// by the actuator, and - so the test also works against actuators predating
+// that reason - any MachineCreation condition message mentioning the raw AWS
+// error code.
+func machineCapacityBlocked(m *machinev1beta1.Machine) (bool, string) {
+	if m.Status.ProviderStatus == nil {
+		return false, ""
+	}
+	providerStatus, err := ProviderStatusFromRawExtension(m.Status.ProviderStatus)
+	if err != nil {
+		return false, ""
+	}
+	for i := range providerStatus.Conditions {
+		condition := providerStatus.Conditions[i]
+		if condition.Type != string(machinev1beta1.MachineCreation) || condition.Status != metav1.ConditionFalse {
+			continue
+		}
+		if condition.Reason == machine.DedicatedHostCapacityUnavailableConditionReason ||
+			strings.Contains(condition.Message, "InsufficientHostCapacity") {
+			return true, condition.Message
+		}
+	}
+	return false, ""
+}
+
+// machinePoll is the classification of a single machine Get, shared by the
+// main polling loop and the drought-confirmation re-check so both apply the
+// same state handling.
+type machinePoll struct {
+	instanceID string
+	blocked    bool
+	message    string
+	failed     bool
+	gone       bool
+	detail     string
+	err        error
+}
+
+// pollMachineOnce fetches the machine once and classifies the result.
+func pollMachineOnce(ctx context.Context, client *machineclient.MachineV1beta1Client, machineName string) machinePoll {
+	m, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return machinePoll{gone: true, detail: fmt.Sprintf("machine %s not found", machineName)}
+	}
+	if err != nil {
+		return machinePoll{err: err}
+	}
+	if instanceID := machineInstanceID(m); instanceID != "" {
+		return machinePoll{instanceID: instanceID}
+	}
+	if m.Status.Phase != nil && *m.Status.Phase == machinev1beta1.PhaseFailed {
+		detail := "no error message"
+		if m.Status.ErrorMessage != nil {
+			detail = *m.Status.ErrorMessage
+		}
+		return machinePoll{failed: true, detail: detail}
+	}
+	if blocked, message := machineCapacityBlocked(m); blocked {
+		return machinePoll{blocked: true, message: message}
+	}
+	return machinePoll{}
+}
+
+// waitForMachineInstanceIDOrCapacitySignal waits for the machine to get an
+// instance, but also watches for the machine creation being blocked by
+// insufficient dedicated host capacity. It returns as soon as the instance
+// appears, the capacity shortage has persisted for capacityDroughtGrace (so
+// the caller can fall back to another availability zone), or the machine
+// terminally failed; otherwise it waits until the deadline (slow allocation).
+//
+// The deadline bounds a derived context used for both the Get calls and the
+// poll interval wait, so an in-flight request or sleep cannot outlive the
+// allocation budget; the caller's own context is left untouched for any
+// cleanup it performs afterwards.
+func waitForMachineInstanceIDOrCapacitySignal(ctx context.Context, client *machineclient.MachineV1beta1Client, machineName string, deadline time.Time) (string, capacityWaitResult, string) {
+	waitCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	var capacityFirstSeen time.Time
+
+	for {
+		poll := pollMachineOnce(waitCtx, client, machineName)
+		switch {
+		case poll.gone:
+			return "", capacityWaitMachineGone, poll.detail
+		case poll.instanceID != "":
+			return poll.instanceID, capacityWaitInstanceReady, ""
+		case poll.failed:
+			return "", capacityWaitMachineFailed, poll.detail
+		case poll.err != nil:
+			// Transient API error, keep polling.
+			GinkgoWriter.Printf("Error getting machine %s (will retry): %v\n", machineName, poll.err)
+		case poll.blocked:
+			if capacityFirstSeen.IsZero() {
+				capacityFirstSeen = time.Now()
+				GinkgoWriter.Printf("Machine %s creation blocked by insufficient dedicated host capacity: %s\n", machineName, poll.message)
+			}
+			if time.Since(capacityFirstSeen) >= capacityDroughtGrace {
+				// One final re-check, classified the same way: a requeue
+				// landing right at the drought-confirm boundary may have
+				// just succeeded, failed terminally, or disappeared.
+				final := pollMachineOnce(waitCtx, client, machineName)
+				switch {
+				case final.instanceID != "":
+					return final.instanceID, capacityWaitInstanceReady, ""
+				case final.gone:
+					return "", capacityWaitMachineGone, final.detail
+				case final.failed:
+					return "", capacityWaitMachineFailed, final.detail
+				case final.blocked:
+					return "", capacityWaitDroughtConfirmed, final.message
+				case final.err != nil:
+					// Don't confirm a drought on a transient error; keep the
+					// grace clock running and try again.
+					GinkgoWriter.Printf("Error on final capacity re-check for machine %s (will retry): %v\n", machineName, final.err)
+				default:
+					// The capacity signal cleared between reads; restart the
+					// grace clock if it reappears.
+					capacityFirstSeen = time.Time{}
+				}
+			}
+		default:
+			// The signal disappeared (e.g. the condition changed); restart the
+			// grace clock if it reappears.
+			capacityFirstSeen = time.Time{}
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+				return "", capacityWaitTimeout, fmt.Sprintf("machine %s still has no instance", machineName)
+			}
+			return "", capacityWaitTimeout, waitCtx.Err().Error()
+		case <-time.After(capacityPollInterval):
+		}
+	}
+}
+
+// deleteMachineAndWait deletes a machine and waits for it to disappear. Unlike
+// cleanupMachineAndNode it does not wait for a node: it is used for machines
+// that never got an instance, which cannot have one.
+func deleteMachineAndWait(ctx context.Context, client *machineclient.MachineV1beta1Client, machineName string, timeout time.Duration) {
+	By("Cleaning up test machine")
+	GinkgoWriter.Printf("Deleting machine %s\n", machineName)
+	err := client.Machines(machineutil.MachineAPINamespace).Delete(ctx, machineName, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
+
+	Eventually(func() bool {
+		_, err := client.Machines(machineutil.MachineAPINamespace).Get(ctx, machineName, metav1.GetOptions{})
+		return apierrors.IsNotFound(err)
+	}, timeout, defaultPollingInterval).Should(BeTrue())
+}
+
+// azSuggestionPattern matches availability zone tokens like "us-west-2a" or
+// "us-gov-west-1a" inside free-form AWS error text.
+var azSuggestionPattern = regexp.MustCompile(`\b([a-z]{2}(?:-gov)?-[a-z]+-\d[a-z])\b`)
+
+// parseAZSuggestions extracts availability zones AWS suggested as
+// alternatives from free-form error text, e.g. "... you can get capacity by
+// specifying availability zone us-west-2b ...". Only zones of the given region
+// other than the current one are returned, deduplicated in order of
+// appearance. It is best-effort: a no-match simply leaves the fallback order
+// unchanged.
+func parseAZSuggestions(text, region, currentAZ string) []string {
+	matches := azSuggestionPattern.FindAllString(text, -1)
+	suggestions := make([]string, 0, len(matches))
+	for _, az := range matches {
+		if az == currentAZ || !strings.HasPrefix(az, region) {
+			continue
+		}
+		duplicate := false
+		for _, existing := range suggestions {
+			if existing == az {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			suggestions = append(suggestions, az)
+		}
+	}
+	return suggestions
+}
+
+// recentMachineEvents concatenates the messages of the machine's most recent
+// events. The InsufficientDedicatedHostCapacity event carries the raw AWS
+// error text (including any alternative-zone suggestions), which the machine
+// status condition does not.
+func recentMachineEvents(ctx context.Context, kubeClient *kubernetes.Clientset, machineName string) string {
+	events, err := kubeClient.CoreV1().Events(machineutil.MachineAPINamespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("involvedObject.name=%s", machineName),
+	})
+	if err != nil {
+		GinkgoWriter.Printf("Unable to list events for machine %s: %v\n", machineName, err)
+		return ""
+	}
+	var builder strings.Builder
+	for _, event := range events.Items {
+		builder.WriteString(event.Message)
+		builder.WriteString("\n")
+	}
+	return builder.String()
+}
+
+// reorderRemainingCandidates moves the candidates after index tried that AWS
+// suggested as alternatives to the front, in suggestion order. Suggested zones
+// without a candidate (no known subnet and template for them) cannot be used,
+// and all remaining zones keep their relative order after the suggested ones.
+func reorderRemainingCandidates(candidates []azCandidate, tried int, suggestedAZs []string) []azCandidate {
+	if len(suggestedAZs) == 0 {
+		return candidates
+	}
+	remaining := append([]azCandidate(nil), candidates[tried+1:]...)
+
+	var suggested, others []azCandidate
+	for _, az := range suggestedAZs {
+		for i := range remaining {
+			if remaining[i].availabilityZone == az {
+				suggested = append(suggested, remaining[i])
+				remaining = append(remaining[:i], remaining[i+1:]...)
+				break
+			}
+		}
+	}
+	others = remaining
+
+	reordered := make([]azCandidate, 0, len(candidates))
+	reordered = append(reordered, candidates[:tried+1]...)
+	reordered = append(reordered, suggested...)
+	reordered = append(reordered, others...)
+	return reordered
 }
 
 // cleanupMachineAndNode deletes a machine and waits for both the machine and its associated node to be removed

@@ -429,6 +429,16 @@ func (in *CPUOptions) DeepCopyInto(out *CPUOptions) {
 		*out = new(AWSConfidentialComputePolicy)
 		**out = **in
 	}
+	if in.CoreCount != nil {
+		in, out := &in.CoreCount, &out.CoreCount
+		*out = new(int64)
+		**out = **in
+	}
+	if in.ThreadsPerCore != nil {
+		in, out := &in.ThreadsPerCore, &out.ThreadsPerCore
+		*out = new(int64)
+		**out = **in
+	}
 	return
 }
 

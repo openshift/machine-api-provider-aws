@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/aws/smithy-go"
 	"github.com/golang/mock/gomock"
 	mockaws "github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -17,9 +17,9 @@ type mockAPIError struct {
 	msg  string
 }
 
-func (e *mockAPIError) Error() string            { return e.msg }
-func (e *mockAPIError) ErrorCode() string         { return e.code }
-func (e *mockAPIError) ErrorMessage() string       { return e.msg }
+func (e *mockAPIError) Error() string                 { return e.msg }
+func (e *mockAPIError) ErrorCode() string             { return e.code }
+func (e *mockAPIError) ErrorMessage() string          { return e.msg }
 func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
 // Ensure it satisfies the interface

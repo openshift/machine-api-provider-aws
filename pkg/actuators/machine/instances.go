@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -30,13 +31,17 @@ const (
 	zoneTypeWavelengthZone = "wavelength-zone"
 )
 
-// int64PtrToInt32Ptr converts a *int64 to a *int32.
-func int64PtrToInt32Ptr(v *int64) *int32 {
+// int64PtrToInt32Ptr converts a *int64 to a *int32, returning an error if the
+// value overflows the int32 range.
+func int64PtrToInt32Ptr(v *int64) (*int32, error) {
 	if v == nil {
-		return nil
+		return nil, nil
+	}
+	if *v > math.MaxInt32 || *v < math.MinInt32 {
+		return nil, fmt.Errorf("value %d overflows int32 range", *v)
 	}
 	i32 := int32(*v)
-	return &i32
+	return &i32, nil
 }
 
 // Scan machine tags, and return a deduped tags list. The first found value gets precedence.
@@ -312,10 +317,15 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 			deviceName = describeAMIResult.Images[0].RootDeviceName
 		}
 
+		volumeSizeInt32, err := int64PtrToInt32Ptr(volumeSize)
+		if err != nil {
+			return nil, fmt.Errorf("invalid volume size: %w", err)
+		}
+
 		blockDeviceMapping := ec2types.BlockDeviceMapping{
 			DeviceName: deviceName,
 			Ebs: &ec2types.EbsBlockDevice{
-				VolumeSize:          int64PtrToInt32Ptr(volumeSize),
+				VolumeSize:          volumeSizeInt32,
 				VolumeType:          ec2types.VolumeType(aws.ToString(volumeType)),
 				Encrypted:           blockDeviceMappingSpec.EBS.Encrypted,
 				DeleteOnTermination: &deleteOnTermination,
@@ -331,7 +341,11 @@ func getBlockDeviceMappings(machine runtimeclient.ObjectKey, blockDeviceMappingS
 			// This means that any existing installation may break unless we ignore 0 values.
 			// 0 Iops is below the minimum so AWS will fail the instance create request if we send a 0 value.
 			if blockDeviceMappingSpec.EBS.Iops != nil && *blockDeviceMappingSpec.EBS.Iops > 0 {
-				blockDeviceMapping.Ebs.Iops = int64PtrToInt32Ptr(blockDeviceMappingSpec.EBS.Iops)
+				iopsInt32, err := int64PtrToInt32Ptr(blockDeviceMappingSpec.EBS.Iops)
+				if err != nil {
+					return nil, fmt.Errorf("invalid IOPS value: %w", err)
+				}
+				blockDeviceMapping.Ebs.Iops = iopsInt32
 			}
 			if ec2types.VolumeType(aws.ToString(volumeType)) == ec2types.VolumeTypeGp3 && blockDeviceMappingSpec.EBS.ThroughputMib != nil && *blockDeviceMappingSpec.EBS.ThroughputMib > 0 {
 				blockDeviceMapping.Ebs.Throughput = aws.Int32(int32(*blockDeviceMappingSpec.EBS.ThroughputMib))
@@ -376,6 +390,9 @@ func launchInstance(machine *machinev1beta1.Machine, machineProviderConfig *mach
 
 	// build list of networkInterfaces (just 1 for now)
 	subnetID := subnetIDs[0]
+	if machineProviderConfig.DeviceIndex > math.MaxInt32 || machineProviderConfig.DeviceIndex < math.MinInt32 {
+		return nil, "", mapierrors.InvalidMachineConfiguration("deviceIndex %d overflows int32 range", machineProviderConfig.DeviceIndex)
+	}
 	var networkInterfaces = []ec2types.InstanceNetworkInterfaceSpecification{
 		{
 			DeviceIndex: aws.Int32(int32(machineProviderConfig.DeviceIndex)),

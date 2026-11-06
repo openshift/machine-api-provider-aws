@@ -112,11 +112,14 @@ type awsClient struct {
 }
 
 func (c *awsClient) CloseIdleConnections() {
-	if c.cfg.HTTPClient != nil {
-		if closer, ok := c.cfg.HTTPClient.(interface{ CloseIdleConnections() }); ok {
-			closer.CloseIdleConnections()
-			klog.V(4).Info("Closed AWS config idle connections")
-		}
+	httpClient := c.cfg.HTTPClient
+	if httpClient == nil {
+		klog.V(4).Info("No HTTP client configured, skipping idle connection cleanup")
+		return
+	}
+	if closer, ok := httpClient.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+		klog.V(4).Info("Closed AWS config idle connections")
 	}
 }
 
@@ -525,10 +528,17 @@ func elbClientFromConfig(cfg aws.Config, customEndpoints map[string]string) *ela
 	return elasticloadbalancing.NewFromConfig(cfg, opts...)
 }
 
-// elbv2ClientFromConfig creates an ELBv2 client with optional custom endpoint
+// elbv2ClientFromConfig creates an ELBv2 client with optional custom endpoint.
+// If no elasticloadbalancingv2 endpoint is configured, it falls back to the
+// elasticloadbalancing endpoint since both services often share the same
+// custom endpoint in restricted environments (e.g., GovCloud, C2S).
 func elbv2ClientFromConfig(cfg aws.Config, customEndpoints map[string]string) *elasticloadbalancingv2.Client {
 	opts := []func(*elasticloadbalancingv2.Options){}
 	if url, ok := customEndpoints["elasticloadbalancingv2"]; ok {
+		opts = append(opts, func(o *elasticloadbalancingv2.Options) {
+			o.BaseEndpoint = aws.String(url)
+		})
+	} else if url, ok := customEndpoints["elasticloadbalancing"]; ok {
 		opts = append(opts, func(o *elasticloadbalancingv2.Options) {
 			o.BaseEndpoint = aws.String(url)
 		})

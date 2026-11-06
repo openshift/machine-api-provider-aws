@@ -1232,7 +1232,7 @@ func TestLaunchInstance(t *testing.T) {
 				PrivateDnsNameOptions: &ec2types.PrivateDnsNameOptionsRequest{
 					EnableResourceNameDnsARecord:    aws.Bool(true),
 					EnableResourceNameDnsAAAARecord: aws.Bool(true),
-					HostnameType: ec2types.HostnameTypeResourceName,
+					HostnameType:                    ec2types.HostnameTypeResourceName,
 				},
 			},
 		},
@@ -1283,7 +1283,7 @@ func TestLaunchInstance(t *testing.T) {
 				PrivateDnsNameOptions: &ec2types.PrivateDnsNameOptionsRequest{
 					EnableResourceNameDnsARecord:    aws.Bool(true),
 					EnableResourceNameDnsAAAARecord: aws.Bool(true),
-					HostnameType: ec2types.HostnameTypeResourceName,
+					HostnameType:                    ec2types.HostnameTypeResourceName,
 				},
 			},
 		},
@@ -1623,7 +1623,7 @@ func TestGetPrivateDNSNameOptionsRequest(t *testing.T) {
 			expected: &ec2types.PrivateDnsNameOptionsRequest{
 				EnableResourceNameDnsARecord:    aws.Bool(true),
 				EnableResourceNameDnsAAAARecord: aws.Bool(true),
-				HostnameType: ec2types.HostnameTypeResourceName,
+				HostnameType:                    ec2types.HostnameTypeResourceName,
 			},
 		},
 		{
@@ -1640,7 +1640,7 @@ func TestGetPrivateDNSNameOptionsRequest(t *testing.T) {
 			expected: &ec2types.PrivateDnsNameOptionsRequest{
 				EnableResourceNameDnsARecord:    aws.Bool(true),
 				EnableResourceNameDnsAAAARecord: aws.Bool(true),
-				HostnameType: ec2types.HostnameTypeResourceName,
+				HostnameType:                    ec2types.HostnameTypeResourceName,
 			},
 		},
 		{
@@ -2020,7 +2020,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 			},
 			expected: &ec2types.Placement{
 				Affinity: aws.String("host"),
-				Tenancy: ec2types.Tenancy("host"),
+				Tenancy:  ec2types.Tenancy("host"),
 				HostId:   ptr.To(hostID),
 			},
 		},
@@ -2039,7 +2039,7 @@ func TestConstructInstancePlacement_HostPlacement(t *testing.T) {
 				}
 			},
 			expected: &ec2types.Placement{
-				Tenancy: ec2types.Tenancy("host"),
+				Tenancy:  ec2types.Tenancy("host"),
 				Affinity: aws.String("host"),
 				HostId:   ptr.To(hostID),
 			},

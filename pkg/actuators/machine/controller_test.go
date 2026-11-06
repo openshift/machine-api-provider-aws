@@ -6,7 +6,8 @@ import (
 	"log"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/gomega"
 	configv1 "github.com/openshift/api/config/v1"
@@ -37,21 +38,21 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 
 		// DesrcibeInstances by tags should only happen before the instance is created/if the provider ID returns nothing
 		// For the purpose of this test, don't provide an output, we want to control the provider ID response instead.
-		mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInputFromName()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
+		mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), stubDescribeInstancesInputFromName()).Return(&ec2.DescribeInstancesOutput{}, nil).AnyTimes()
 
 		// Once the actuator has determined the Machine doesn't exist, it should eventually request to create the machine
-		mockAWSClient.EXPECT().RunInstances(gomock.Any()).Return(stubReservation("ami-a9acbbd6", stubInstanceID, "192.168.0.10"), nil).Times(1)
+		mockAWSClient.EXPECT().RunInstances(gomock.Any(), gomock.Any()).Return(stubReservation("ami-a9acbbd6", stubInstanceID, "192.168.0.10"), nil).Times(1)
 
 		// After the create, it will reconcile load balancer attachements, we don't care about these for this test
-		mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any()).Return(nil, nil).AnyTimes()
-		mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
-		mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
-		mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any()).Return(nil, nil).AnyTimes()
-		mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
-		mockAWSClient.EXPECT().DescribeVpcs(gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
-		mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
-		mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
-		mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().RegisterInstancesWithLoadBalancer(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+		mockAWSClient.EXPECT().ELBv2DescribeLoadBalancers(gomock.Any(), gomock.Any()).Return(stubDescribeLoadBalancersOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().ELBv2DescribeTargetGroups(gomock.Any(), gomock.Any()).Return(stubDescribeTargetGroupsOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().ELBv2RegisterTargets(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+		mockAWSClient.EXPECT().ELBv2DescribeTargetHealth(gomock.Any(), gomock.Any()).Return(stubDescribeTargetHealthOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(StubDescribeVPCs()).AnyTimes()
+		mockAWSClient.EXPECT().DescribeDHCPOptions(gomock.Any(), gomock.Any()).Return(StubDescribeDHCPOptions()).AnyTimes()
+		mockAWSClient.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(stubDescribeSubnetsOutput(), nil).AnyTimes()
+		mockAWSClient.EXPECT().DescribeAvailabilityZones(gomock.Any(), gomock.Any()).Return(stubDescribeAvailabilityZonesOutput(), nil).AnyTimes()
 
 		// After create, we will assert that the instance doesn't exist for the first 3 times that the call is made
 		// - The first call is Exists, which will return that the instance does not exist
@@ -59,11 +60,11 @@ func TestMachineControllerWithDelayedExistSuccess(t *testing.T) {
 		//   check for the providerStatus.InstanceID should prevent a second create and requeue.
 		// - The third call is Exists on the second reconcile, after which we start returning the instance to allow
 		//   the Create eventual consistency error to requeue again, after which Exists will succeed going forward.
-		assertNotExist := mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(stubInstanceID)).Return(&ec2.DescribeInstancesOutput{}, nil).MaxTimes(3)
-		mockAWSClient.EXPECT().DescribeInstances(stubDescribeInstancesInput(stubInstanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", stubInstanceID, ec2.InstanceStateNameRunning, "192.168.0.10"), nil).After(assertNotExist).AnyTimes()
+		assertNotExist := mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), stubDescribeInstancesInput(stubInstanceID)).Return(&ec2.DescribeInstancesOutput{}, nil).MaxTimes(3)
+		mockAWSClient.EXPECT().DescribeInstances(gomock.Any(), stubDescribeInstancesInput(stubInstanceID)).Return(stubDescribeInstancesOutput("ami-a9acbbd6", stubInstanceID, string(ec2types.InstanceStateNameRunning), "192.168.0.10"), nil).After(assertNotExist).AnyTimes()
 
 		// Once the machine gets to the update stage, tags will be updated
-		mockAWSClient.EXPECT().CreateTags(gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
+		mockAWSClient.EXPECT().CreateTags(gomock.Any(), gomock.Any()).Return(&ec2.CreateTagsOutput{}, nil).AnyTimes()
 	}
 
 	var k8sClient runtimeclient.Client

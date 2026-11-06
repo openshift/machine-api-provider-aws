@@ -2,15 +2,15 @@ package termination
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	awsrequest "github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -22,7 +22,6 @@ import (
 )
 
 const (
-	awsTerminationEndpointURL                           = "/latest/meta-data/spot/termination-time"
 	terminatingConditionType   corev1.NodeConditionType = "Terminating"
 	terminationRequestedReason                          = "TerminationRequested"
 )
@@ -67,11 +66,21 @@ type handler struct {
 func (h *handler) Run(stop <-chan struct{}) error {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	imdsSession := session.Must(session.NewSession(&aws.Config{
-		MaxRetries: aws.Int(3),
-		Endpoint:   h.endpoint,
-	}))
-	imdsClient := ec2metadata.New(imdsSession)
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRetryMaxAttempts(3),
+	)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("error loading AWS config: %v", err)
+	}
+
+	imdsOpts := []func(*imds.Options){}
+	if h.endpoint != nil {
+		imdsOpts = append(imdsOpts, func(o *imds.Options) {
+			o.Endpoint = *h.endpoint
+		})
+	}
+	imdsClient := imds.NewFromConfig(awsCfg, imdsOpts...)
 
 	errs := make(chan error, 1)
 	wg := &sync.WaitGroup{}
@@ -92,36 +101,31 @@ func (h *handler) Run(stop <-chan struct{}) error {
 	}
 }
 
-func (h *handler) run(ctx context.Context, imdsClient *ec2metadata.EC2Metadata, wg *sync.WaitGroup) error {
+func (h *handler) run(ctx context.Context, imdsClient *imds.Client, wg *sync.WaitGroup) error {
 	defer wg.Done()
 
 	logger := h.log.WithValues("node", h.nodeName)
 	logger.V(1).Info("Monitoring node termination")
 
 	if err := wait.PollImmediateUntil(h.pollInterval, func() (bool, error) {
-		// code below mostly replicates GetMetadataWithContext method of the imdsClient.
-		// https://github.com/aws/aws-sdk-go/blob/v1.43.20/aws/ec2metadata/api.go#L61
-		// Since it's not possible to reliably extract information from result of such function, manual request prep
-		// and handling happens here.
-		op := &awsrequest.Operation{
-			Name:       "GetMetadata",
-			HTTPMethod: "GET",
-			HTTPPath:   awsTerminationEndpointURL,
-		}
-		req := imdsClient.NewRequest(op, nil, nil)
-		req.SetContext(ctx)
-		// we do not care about response data, all what we are interesting about is the status code.
-		// successful request means that instance was marked for termination.
-		// If instance not yet marked, response with 404 code will be returned from imds
-		err := req.Send()
+		output, err := imdsClient.GetMetadata(ctx, &imds.GetMetadataInput{
+			Path: "spot/termination-time",
+		})
 		if err != nil {
-			if req.HTTPResponse.StatusCode == http.StatusNotFound {
-				logger.V(2).Info("Instance not marked for termination")
-				return false, nil
+			// A non-200 response (typically 404) means instance is not marked for termination
+			var respErr *smithyhttp.ResponseError
+			if errors.As(err, &respErr) {
+				if respErr.HTTPStatusCode() == http.StatusNotFound {
+					logger.V(2).Info("Instance not marked for termination")
+					return false, nil
+				}
 			}
 			return false, fmt.Errorf("%w", err)
 		}
-		// successful request, instance marked for termination. Done here.
+		// Successful request means instance was marked for termination
+		if output != nil && output.Content != nil {
+			output.Content.Close()
+		}
 		return true, nil
 	}, ctx.Done()); err != nil {
 		return fmt.Errorf("error polling termination endpoint: %v", err)

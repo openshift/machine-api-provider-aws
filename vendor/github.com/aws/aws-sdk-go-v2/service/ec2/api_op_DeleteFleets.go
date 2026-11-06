@@ -4,11 +4,8 @@ package ec2
 
 import (
 	"context"
-	"fmt"
-	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go/middleware"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 // Deletes the specified EC2 Fleet request.
@@ -28,6 +25,17 @@ import (
 // manually, leaving 1000 or fewer. Then delete the fleet, and the remaining
 // instances will be terminated automatically.
 //
+// Terminating an instance is permanent and irreversible.
+//
+// After you terminate an instance, you can no longer connect to it, and it can't
+// be recovered. All attached Amazon EBS volumes that are configured to be deleted
+// on termination are also permanently deleted and can't be recovered. All data
+// stored on instance store volumes is permanently lost. For more information, see [How instance termination works]
+// .
+//
+// Before you terminate an instance, ensure that you have backed up all data that
+// you need to retain after the termination to persistent storage.
+//
 // Restrictions
 //
 //   - You can delete up to 25 fleets of type instant in a single request.
@@ -43,6 +51,7 @@ import (
 //
 // For more information, see [Delete an EC2 Fleet request and the instances in the fleet] in the Amazon EC2 User Guide.
 //
+// [How instance termination works]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/how-ec2-instance-termination-works.html
 // [Delete an EC2 Fleet request and the instances in the fleet]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/delete-fleet.html
 func (c *Client) DeleteFleets(ctx context.Context, params *DeleteFleetsInput, optFns ...func(*Options)) (*DeleteFleetsOutput, error) {
 	if params == nil {
@@ -105,9 +114,6 @@ type DeleteFleetsOutput struct {
 }
 
 func (c *Client) addOperationDeleteFleetsMiddlewares(stack *middleware.Stack, options Options) (err error) {
-	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
-		return err
-	}
 	err = stack.Serialize.Add(&awsEc2query_serializeOpDeleteFleets{}, middleware.After)
 	if err != nil {
 		return err
@@ -116,68 +122,20 @@ func (c *Client) addOperationDeleteFleetsMiddlewares(stack *middleware.Stack, op
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "DeleteFleets"); err != nil {
-		return fmt.Errorf("add protocol finalizers: %v", err)
-	}
 
-	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
-		return err
-	}
-	if err = addSetLoggerMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addClientRequestID(stack); err != nil {
-		return err
-	}
-	if err = addComputeContentLength(stack); err != nil {
-		return err
-	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
-		return err
-	}
-	if err = addRawResponseToMetadata(stack); err != nil {
-		return err
-	}
-	if err = addRecordResponseTiming(stack); err != nil {
-		return err
-	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addClientUserAgent(stack, options); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addRecordResponseTiming(stack, options); err != nil {
 		return err
 	}
 	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpDeleteFleetsValidationMiddleware(stack); err != nil {
-		return err
-	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opDeleteFleets(options.Region), middleware.Before); err != nil {
-		return err
-	}
-	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addRequestIDRetrieverMiddleware(stack); err != nil {
@@ -192,25 +150,8 @@ func (c *Client) addOperationDeleteFleetsMiddlewares(stack *middleware.Stack, op
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
-}
-
-func newServiceMetadataMiddleware_opDeleteFleets(region string) *awsmiddleware.RegisterServiceMetadata {
-	return &awsmiddleware.RegisterServiceMetadata{
-		Region:        region,
-		ServiceID:     ServiceID,
-		OperationName: "DeleteFleets",
-	}
 }

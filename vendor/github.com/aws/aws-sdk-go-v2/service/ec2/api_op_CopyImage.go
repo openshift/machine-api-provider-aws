@@ -5,27 +5,72 @@ package ec2
 import (
 	"context"
 	"fmt"
-	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go/middleware"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// Initiates an AMI copy operation. You can copy an AMI from one Region to
-// another, or from a Region to an Outpost. You can't copy an AMI from an Outpost
-// to a Region, from one Outpost to another, or within the same Outpost. To copy an
-// AMI to another partition, see [CreateStoreImageTask].
+// Initiates an AMI copy operation. You must specify the source AMI ID and both
+// the source and destination locations. The copy operation must be initiated in
+// the destination Region.
 //
-// When you copy an AMI from one Region to another, the destination Region is the
-// current Region.
+// CopyImage supports the following source to destination copies:
 //
-// When you copy an AMI from a Region to an Outpost, specify the ARN of the
-// Outpost as the destination. Backing snapshots copied to an Outpost are encrypted
-// by default using the default encryption key for the Region or the key that you
-// specify. Outposts do not support unencrypted snapshots.
+//   - Region to Region
 //
-// For information about the prerequisites when copying an AMI, see [Copy an Amazon EC2 AMI] in the Amazon
-// EC2 User Guide.
+//   - Region to Outpost
+//
+//   - Parent Region to Local Zone
+//
+//   - Local Zone to parent Region
+//
+//   - Between Local Zones with the same parent Region (only supported for certain
+//     Local Zones)
+//
+// CopyImage does not support the following source to destination copies:
+//
+//   - Local Zone to non-parent Regions
+//
+//   - Between Local Zones with different parent Regions
+//
+//   - Local Zone to Outpost
+//
+//   - Outpost to Local Zone
+//
+//   - Outpost to Region
+//
+//   - Between Outposts
+//
+//   - Within same Outpost
+//
+//   - Cross-partition copies (use [CreateStoreImageTask]instead)
+//
+// Destination specification
+//
+//   - Region to Region: The destination Region is the Region in which you
+//     initiate the copy operation.
+//
+//   - Region to Outpost: Specify the destination using the DestinationOutpostArn
+//     parameter (the ARN of the Outpost)
+//
+//   - Region to Local Zone, and Local Zone to Local Zone copies: Specify the
+//     destination using the DestinationAvailabilityZone parameter (the name of the
+//     destination Local Zone) or DestinationAvailabilityZoneId parameter (the ID of
+//     the destination Local Zone).
+//
+// Snapshot encryption
+//
+//   - Region to Outpost: Backing snapshots copied to an Outpost are encrypted by
+//     default using the default encryption key for the Region or the key that you
+//     specify. Outposts do not support unencrypted snapshots.
+//
+//   - Region to Local Zone, and Local Zone to Local Zone: Not all Local Zones
+//     require encrypted snapshots. In Local Zones that require encrypted snapshots,
+//     backing snapshots are automatically encrypted during copy. In Local Zones where
+//     encryption is not required, snapshots retain their original encryption state
+//     (encrypted or unencrypted) by default.
+//
+// For more information, including the required permissions for copying an AMI,
+// see [Copy an Amazon EC2 AMI]in the Amazon EC2 User Guide.
 //
 // [CreateStoreImageTask]: https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateStoreImageTask.html
 // [Copy an Amazon EC2 AMI]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/CopyingAMIs.html
@@ -47,7 +92,7 @@ func (c *Client) CopyImage(ctx context.Context, params *CopyImageInput, optFns .
 // Contains the parameters for CopyImage.
 type CopyImageInput struct {
 
-	// The name of the new AMI in the destination Region.
+	// The name of the new AMI.
 	//
 	// This member is required.
 	Name *string
@@ -68,28 +113,47 @@ type CopyImageInput struct {
 	// [Ensuring idempotency in Amazon EC2 API requests]: https://docs.aws.amazon.com/AWSEC2/latest/APIReference/Run_Instance_Idempotency.html
 	ClientToken *string
 
-	// Indicates whether to include your user-defined AMI tags when copying the AMI.
+	// Specifies whether to copy your user-defined AMI tags to the new AMI.
 	//
-	// The following tags will not be copied:
+	// The following tags are not be copied:
 	//
 	//   - System tags (prefixed with aws: )
 	//
 	//   - For public and shared AMIs, user-defined tags that are attached by other
-	//   Amazon Web Services accounts
+	//   Amazon Web Services accounts, except tags with the ec2:SharedTag/ prefix. For
+	//   more information about tag sharing, see [Sharing tags]in the Amazon EC2 User Guide.
 	//
 	// Default: Your user-defined AMI tags are not copied.
+	//
+	// [Sharing tags]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html#sharing-tags
 	CopyImageTags *bool
 
-	// A description for the new AMI in the destination Region.
+	// A description for the new AMI.
 	Description *string
 
-	// The Amazon Resource Name (ARN) of the Outpost to which to copy the AMI. Only
-	// specify this parameter when copying an AMI from an Amazon Web Services Region to
-	// an Outpost. The AMI must be in the Region of the destination Outpost. You cannot
-	// copy an AMI from an Outpost to a Region, from one Outpost to another, or within
-	// the same Outpost.
+	// The Local Zone for the new AMI (for example, cn-north-1-pkx-1a ).
+	//
+	// Only one of DestinationAvailabilityZone , DestinationAvailabilityZoneId , or
+	// DestinationOutpostArn can be specified.
+	DestinationAvailabilityZone *string
+
+	// The ID of the Local Zone for the new AMI (for example, cnn1-pkx1-az1 ).
+	//
+	// Only one of DestinationAvailabilityZone , DestinationAvailabilityZoneId , or
+	// DestinationOutpostArn can be specified.
+	DestinationAvailabilityZoneId *string
+
+	// The Amazon Resource Name (ARN) of the Outpost for the new AMI.
+	//
+	// Only specify this parameter when copying an AMI from an Amazon Web Services
+	// Region to an Outpost. The AMI must be in the Region of the destination Outpost.
+	// You can't copy an AMI from an Outpost to a Region, from one Outpost to another,
+	// or within the same Outpost.
 	//
 	// For more information, see [Copy AMIs from an Amazon Web Services Region to an Outpost] in the Amazon EBS User Guide.
+	//
+	// Only one of DestinationAvailabilityZone , DestinationAvailabilityZoneId , or
+	// DestinationOutpostArn can be specified.
 	//
 	// [Copy AMIs from an Amazon Web Services Region to an Outpost]: https://docs.aws.amazon.com/ebs/latest/userguide/snapshots-outposts.html#copy-amis
 	DestinationOutpostArn *string
@@ -100,12 +164,12 @@ type CopyImageInput struct {
 	// UnauthorizedOperation .
 	DryRun *bool
 
-	// Specifies whether the destination snapshots of the copied image should be
-	// encrypted. You can encrypt a copy of an unencrypted snapshot, but you cannot
-	// create an unencrypted copy of an encrypted snapshot. The default KMS key for
-	// Amazon EBS is used unless you specify a non-default Key Management Service (KMS)
-	// KMS key using KmsKeyId . For more information, see [Use encryption with EBS-backed AMIs] in the Amazon EC2 User
-	// Guide.
+	// Specifies whether to encrypt the snapshots of the copied image.
+	//
+	// You can encrypt a copy of an unencrypted snapshot, but you cannot create an
+	// unencrypted copy of an encrypted snapshot. The default KMS key for Amazon EBS is
+	// used unless you specify a non-default Key Management Service (KMS) KMS key using
+	// KmsKeyId . For more information, see [Use encryption with EBS-backed AMIs] in the Amazon EC2 User Guide.
 	//
 	// [Use encryption with EBS-backed AMIs]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIEncryption.html
 	Encrypted *bool
@@ -146,6 +210,9 @@ type CopyImageInput struct {
 	// If you do not specify a value, the AMI copy operation is completed on a
 	// best-effort basis.
 	//
+	// This parameter is not supported when copying an AMI to or from a Local Zone, or
+	// to an Outpost.
+	//
 	// For more information, see [Time-based copies for Amazon EBS snapshots and EBS-backed AMIs].
 	//
 	// [Time-based copies for Amazon EBS snapshots and EBS-backed AMIs]: https://docs.aws.amazon.com/ebs/latest/userguide/time-based-copies.html
@@ -182,9 +249,6 @@ type CopyImageOutput struct {
 }
 
 func (c *Client) addOperationCopyImageMiddlewares(stack *middleware.Stack, options Options) (err error) {
-	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
-		return err
-	}
 	err = stack.Serialize.Add(&awsEc2query_serializeOpCopyImage{}, middleware.After)
 	if err != nil {
 		return err
@@ -193,56 +257,14 @@ func (c *Client) addOperationCopyImageMiddlewares(stack *middleware.Stack, optio
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "CopyImage"); err != nil {
-		return fmt.Errorf("add protocol finalizers: %v", err)
-	}
 
-	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
-		return err
-	}
-	if err = addSetLoggerMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addClientRequestID(stack); err != nil {
-		return err
-	}
-	if err = addComputeContentLength(stack); err != nil {
-		return err
-	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
-		return err
-	}
-	if err = addRawResponseToMetadata(stack); err != nil {
-		return err
-	}
-	if err = addRecordResponseTiming(stack); err != nil {
-		return err
-	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addClientUserAgent(stack, options); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addRecordResponseTiming(stack, options); err != nil {
 		return err
 	}
 	if err = addCredentialSource(stack, options); err != nil {
@@ -252,12 +274,6 @@ func (c *Client) addOperationCopyImageMiddlewares(stack *middleware.Stack, optio
 		return err
 	}
 	if err = addOpCopyImageValidationMiddleware(stack); err != nil {
-		return err
-	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opCopyImage(options.Region), middleware.Before); err != nil {
-		return err
-	}
-	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addRequestIDRetrieverMiddleware(stack); err != nil {
@@ -272,16 +288,7 @@ func (c *Client) addOperationCopyImageMiddlewares(stack *middleware.Stack, optio
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
@@ -318,12 +325,4 @@ func (m *idempotencyToken_initializeOpCopyImage) HandleInitialize(ctx context.Co
 }
 func addIdempotencyToken_opCopyImageMiddleware(stack *middleware.Stack, cfg Options) error {
 	return stack.Initialize.Add(&idempotencyToken_initializeOpCopyImage{tokenProvider: cfg.IdempotencyTokenProvider}, middleware.Before)
-}
-
-func newServiceMetadataMiddleware_opCopyImage(region string) *awsmiddleware.RegisterServiceMetadata {
-	return &awsmiddleware.RegisterServiceMetadata{
-		Region:        region,
-		ServiceID:     ServiceID,
-		OperationName: "CopyImage",
-	}
 }

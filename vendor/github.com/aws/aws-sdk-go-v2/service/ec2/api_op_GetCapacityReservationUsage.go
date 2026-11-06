@@ -4,11 +4,8 @@ package ec2
 
 import (
 	"context"
-	"fmt"
-	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go/middleware"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 // Gets usage information about a Capacity Reservation. If the Capacity
@@ -72,6 +69,18 @@ type GetCapacityReservationUsageOutput struct {
 	// Information about the Capacity Reservation usage.
 	InstanceUsages []types.InstanceUsage
 
+	//  Indicates whether the Capacity Reservation is interruptible, meaning instances
+	// may be terminated when the owner reclaims capacity.
+	Interruptible *bool
+
+	//  Information about the capacity allocated to the interruptible Capacity
+	// Reservation, including instance counts and allocation status.
+	InterruptibleCapacityAllocation *types.InterruptibleCapacityAllocation
+
+	//  Details about the interruption configuration and source reservation for
+	// interruptible Capacity Reservations.
+	InterruptionInfo *types.InterruptionInfo
+
 	// The token to use to retrieve the next page of results. This value is null when
 	// there are no more results to return.
 	NextToken *string
@@ -117,6 +126,11 @@ type GetCapacityReservationUsageOutput struct {
 	//   the future-dated Capacity Reservation request due to capacity constraints. You
 	//   can view unsupported requests for 30 days. The Capacity Reservation will not be
 	//   delivered.
+	//
+	//   - cancelling - (Future-dated Capacity Reservations) The Capacity Reservation
+	//   is being cancelled. Capacity has been released but charges continue for the
+	//   commitment wind-down period. The reservation transitions to cancelled when the
+	//   wind-down completes.
 	State types.CapacityReservationState
 
 	// The number of instances for which the Capacity Reservation reserves capacity.
@@ -129,9 +143,6 @@ type GetCapacityReservationUsageOutput struct {
 }
 
 func (c *Client) addOperationGetCapacityReservationUsageMiddlewares(stack *middleware.Stack, options Options) (err error) {
-	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
-		return err
-	}
 	err = stack.Serialize.Add(&awsEc2query_serializeOpGetCapacityReservationUsage{}, middleware.After)
 	if err != nil {
 		return err
@@ -140,68 +151,20 @@ func (c *Client) addOperationGetCapacityReservationUsageMiddlewares(stack *middl
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "GetCapacityReservationUsage"); err != nil {
-		return fmt.Errorf("add protocol finalizers: %v", err)
-	}
 
-	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
-		return err
-	}
-	if err = addSetLoggerMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addClientRequestID(stack); err != nil {
-		return err
-	}
-	if err = addComputeContentLength(stack); err != nil {
-		return err
-	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
-		return err
-	}
-	if err = addRawResponseToMetadata(stack); err != nil {
-		return err
-	}
-	if err = addRecordResponseTiming(stack); err != nil {
-		return err
-	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addClientUserAgent(stack, options); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addRecordResponseTiming(stack, options); err != nil {
 		return err
 	}
 	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpGetCapacityReservationUsageValidationMiddleware(stack); err != nil {
-		return err
-	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opGetCapacityReservationUsage(options.Region), middleware.Before); err != nil {
-		return err
-	}
-	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addRequestIDRetrieverMiddleware(stack); err != nil {
@@ -216,25 +179,8 @@ func (c *Client) addOperationGetCapacityReservationUsageMiddlewares(stack *middl
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
-}
-
-func newServiceMetadataMiddleware_opGetCapacityReservationUsage(region string) *awsmiddleware.RegisterServiceMetadata {
-	return &awsmiddleware.RegisterServiceMetadata{
-		Region:        region,
-		ServiceID:     ServiceID,
-		OperationName: "GetCapacityReservationUsage",
-	}
 }

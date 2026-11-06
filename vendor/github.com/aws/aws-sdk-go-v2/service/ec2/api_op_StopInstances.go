@@ -4,28 +4,28 @@ package ec2
 
 import (
 	"context"
-	"fmt"
-	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go/middleware"
-	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 // Stops an Amazon EBS-backed instance. You can restart your instance at any time
 // using the [StartInstances]API. For more information, see [Stop and start Amazon EC2 instances] in the Amazon EC2 User Guide.
 //
-// When you stop an instance, we shut it down.
+// When you stop or hibernate an instance, we shut it down. By default, this
+// includes a graceful operating system (OS) shutdown. To bypass the graceful
+// shutdown, use the skipOsShutdown parameter; however, this might risk data
+// integrity.
 //
-// You can use the Stop operation together with the Hibernate parameter to
-// hibernate an instance if the instance is [enabled for hibernation]and meets the [hibernation prerequisites]. Stopping an instance
-// doesn't preserve data stored in RAM, while hibernation does. If hibernation
-// fails, a normal shutdown occurs. For more information, see [Hibernate your Amazon EC2 instance]in the Amazon EC2
-// User Guide.
+// You can use the StopInstances operation together with the Hibernate parameter
+// to hibernate an instance if the instance is [enabled for hibernation]and meets the [hibernation prerequisites]. Stopping an
+// instance doesn't preserve data stored in RAM, while hibernation does. If
+// hibernation fails, a normal shutdown occurs. For more information, see [Hibernate your Amazon EC2 instance]in the
+// Amazon EC2 User Guide.
 //
 // If your instance appears stuck in the stopping state, there might be an issue
-// with the underlying host computer. You can use the Stop operation together with
-// the Force parameter to force stop your instance. For more information, see [Troubleshoot Amazon EC2 instance stop issues]in
-// the Amazon EC2 User Guide.
+// with the underlying host computer. You can use the StopInstances operation
+// together with the Force parameter to force stop your instance. For more
+// information, see [Troubleshoot Amazon EC2 instance stop issues]in the Amazon EC2 User Guide.
 //
 // Stopping and hibernating an instance differs from rebooting or terminating it.
 // For example, a stopped or hibernated instance retains its root volume and any
@@ -93,12 +93,22 @@ type StopInstancesInput struct {
 
 	// Hibernates the instance if the instance was enabled for hibernation at launch.
 	// If the instance cannot hibernate successfully, a normal shutdown occurs. For
-	// more information, see [Hibernate your instance]in the Amazon EC2 User Guide.
+	// more information, see [Hibernate your Amazon EC2 instance]in the Amazon EC2 User Guide.
 	//
 	// Default: false
 	//
-	// [Hibernate your instance]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Hibernate.html
+	// [Hibernate your Amazon EC2 instance]: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Hibernate.html
 	Hibernate *bool
+
+	// Specifies whether to bypass the graceful OS shutdown process when the instance
+	// is stopped.
+	//
+	// Bypassing the graceful OS shutdown might result in data loss or corruption (for
+	// example, memory contents not flushed to disk or loss of in-flight IOs) or
+	// skipped shutdown scripts.
+	//
+	// Default: false
+	SkipOsShutdown *bool
 
 	noSmithyDocumentSerde
 }
@@ -115,9 +125,6 @@ type StopInstancesOutput struct {
 }
 
 func (c *Client) addOperationStopInstancesMiddlewares(stack *middleware.Stack, options Options) (err error) {
-	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
-		return err
-	}
 	err = stack.Serialize.Add(&awsEc2query_serializeOpStopInstances{}, middleware.After)
 	if err != nil {
 		return err
@@ -126,68 +133,20 @@ func (c *Client) addOperationStopInstancesMiddlewares(stack *middleware.Stack, o
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "StopInstances"); err != nil {
-		return fmt.Errorf("add protocol finalizers: %v", err)
-	}
 
-	if err = addlegacyEndpointContextSetter(stack, options); err != nil {
-		return err
-	}
-	if err = addSetLoggerMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addClientRequestID(stack); err != nil {
-		return err
-	}
-	if err = addComputeContentLength(stack); err != nil {
-		return err
-	}
 	if err = addResolveEndpointMiddleware(stack, options); err != nil {
 		return err
 	}
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
-		return err
-	}
-	if err = addRawResponseToMetadata(stack); err != nil {
-		return err
-	}
-	if err = addRecordResponseTiming(stack); err != nil {
-		return err
-	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addClientUserAgent(stack, options); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddErrorCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = smithyhttp.AddCloseResponseBodyMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
+	if err = addRecordResponseTiming(stack, options); err != nil {
 		return err
 	}
 	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpStopInstancesValidationMiddleware(stack); err != nil {
-		return err
-	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opStopInstances(options.Region), middleware.Before); err != nil {
-		return err
-	}
-	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
 	if err = addRequestIDRetrieverMiddleware(stack); err != nil {
@@ -202,25 +161,8 @@ func (c *Client) addOperationStopInstancesMiddlewares(stack *middleware.Stack, o
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
-}
-
-func newServiceMetadataMiddleware_opStopInstances(region string) *awsmiddleware.RegisterServiceMetadata {
-	return &awsmiddleware.RegisterServiceMetadata{
-		Region:        region,
-		ServiceID:     ServiceID,
-		OperationName: "StopInstances",
-	}
 }

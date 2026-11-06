@@ -31,17 +31,15 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/aws/aws-sdk-go/service/elb"
-	"github.com/aws/aws-sdk-go/service/elb/elbiface"
-	"github.com/aws/aws-sdk-go/service/elbv2"
-	"github.com/aws/aws-sdk-go/service/elbv2/elbv2iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/aws/smithy-go/middleware"
 	configv1 "github.com/openshift/api/config/v1"
 	machineapiapierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -79,141 +77,143 @@ type AwsClientBuilderFuncType func(client client.Client, secretName, namespace, 
 
 // Client is a wrapper object for actual AWS SDK clients to allow for easier testing.
 type Client interface {
-	DescribeImages(*ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error)
-	DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error)
-	DescribeVpcs(*ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
-	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
-	DescribeAvailabilityZones(*ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
-	DescribeSecurityGroups(*ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
-	DescribePlacementGroups(*ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error)
-	DescribeInstanceTypes(*ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error)
-	DescribeHosts(*ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error)
-	AllocateHosts(*ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error)
-	ReleaseHosts(*ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error)
-	RunInstances(*ec2.RunInstancesInput) (*ec2.Reservation, error)
-	DescribeInstances(*ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error)
-	TerminateInstances(*ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error)
-	DescribeVolumes(*ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error)
-	CreateTags(*ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
-	CreatePlacementGroup(*ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error)
-	DeletePlacementGroup(*ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error)
+	DescribeImages(ctx context.Context, input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error)
+	DescribeDHCPOptions(ctx context.Context, input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error)
+	DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error)
+	DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
+	DescribeAvailabilityZones(ctx context.Context, input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error)
+	DescribeSecurityGroups(ctx context.Context, input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error)
+	DescribePlacementGroups(ctx context.Context, input *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error)
+	DescribeInstanceTypes(ctx context.Context, input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error)
+	DescribeHosts(ctx context.Context, input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error)
+	AllocateHosts(ctx context.Context, input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error)
+	ReleaseHosts(ctx context.Context, input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error)
+	RunInstances(ctx context.Context, input *ec2.RunInstancesInput) (*ec2.RunInstancesOutput, error)
+	DescribeInstances(ctx context.Context, input *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error)
+	TerminateInstances(ctx context.Context, input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error)
+	DescribeVolumes(ctx context.Context, input *ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error)
+	CreateTags(ctx context.Context, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error)
+	CreatePlacementGroup(ctx context.Context, input *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error)
+	DeletePlacementGroup(ctx context.Context, input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error)
 
-	RegisterInstancesWithLoadBalancer(*elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error)
-	ELBv2DescribeLoadBalancers(*elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error)
-	ELBv2DescribeTargetGroups(*elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error)
-	ELBv2DescribeTargetHealth(*elbv2.DescribeTargetHealthInput) (*elbv2.DescribeTargetHealthOutput, error)
-	ELBv2RegisterTargets(*elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error)
-	ELBv2DeregisterTargets(*elbv2.DeregisterTargetsInput) (*elbv2.DeregisterTargetsOutput, error)
+	RegisterInstancesWithLoadBalancer(ctx context.Context, input *elasticloadbalancing.RegisterInstancesWithLoadBalancerInput) (*elasticloadbalancing.RegisterInstancesWithLoadBalancerOutput, error)
+	ELBv2DescribeLoadBalancers(ctx context.Context, input *elasticloadbalancingv2.DescribeLoadBalancersInput) (*elasticloadbalancingv2.DescribeLoadBalancersOutput, error)
+	ELBv2DescribeTargetGroups(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetGroupsInput) (*elasticloadbalancingv2.DescribeTargetGroupsOutput, error)
+	ELBv2DescribeTargetHealth(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetHealthInput) (*elasticloadbalancingv2.DescribeTargetHealthOutput, error)
+	ELBv2RegisterTargets(ctx context.Context, input *elasticloadbalancingv2.RegisterTargetsInput) (*elasticloadbalancingv2.RegisterTargetsOutput, error)
+	ELBv2DeregisterTargets(ctx context.Context, input *elasticloadbalancingv2.DeregisterTargetsInput) (*elasticloadbalancingv2.DeregisterTargetsOutput, error)
 }
 
 type awsClient struct {
-	ec2Client   ec2iface.EC2API
-	elbClient   elbiface.ELBAPI
-	elbv2Client elbv2iface.ELBV2API
-	session     *session.Session
+	ec2Client   *ec2.Client
+	elbClient   *elasticloadbalancing.Client
+	elbv2Client *elasticloadbalancingv2.Client
+	cfg         aws.Config
 }
 
 func (c *awsClient) CloseIdleConnections() {
-	if c.session != nil && c.session.Config.HTTPClient != nil {
-		c.session.Config.HTTPClient.CloseIdleConnections()
-		klog.V(4).Info("Closed AWS session idle connections")
+	if c.cfg.HTTPClient != nil {
+		if closer, ok := c.cfg.HTTPClient.(interface{ CloseIdleConnections() }); ok {
+			closer.CloseIdleConnections()
+			klog.V(4).Info("Closed AWS config idle connections")
+		}
 	}
 }
 
-func (c *awsClient) DescribeDHCPOptions(input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
-	return c.ec2Client.DescribeDhcpOptions(input)
+func (c *awsClient) DescribeDHCPOptions(ctx context.Context, input *ec2.DescribeDhcpOptionsInput) (*ec2.DescribeDhcpOptionsOutput, error) {
+	return c.ec2Client.DescribeDhcpOptions(ctx, input)
 }
 
-func (c *awsClient) DescribeImages(input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
-	return c.ec2Client.DescribeImages(input)
+func (c *awsClient) DescribeImages(ctx context.Context, input *ec2.DescribeImagesInput) (*ec2.DescribeImagesOutput, error) {
+	return c.ec2Client.DescribeImages(ctx, input)
 }
 
-func (c *awsClient) DescribeVpcs(input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
-	return c.ec2Client.DescribeVpcs(input)
+func (c *awsClient) DescribeVpcs(ctx context.Context, input *ec2.DescribeVpcsInput) (*ec2.DescribeVpcsOutput, error) {
+	return c.ec2Client.DescribeVpcs(ctx, input)
 }
 
-func (c *awsClient) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
-	return c.ec2Client.DescribeSubnets(input)
+func (c *awsClient) DescribeSubnets(ctx context.Context, input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	return c.ec2Client.DescribeSubnets(ctx, input)
 }
 
-func (c *awsClient) DescribeAvailabilityZones(input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
-	return c.ec2Client.DescribeAvailabilityZones(input)
+func (c *awsClient) DescribeAvailabilityZones(ctx context.Context, input *ec2.DescribeAvailabilityZonesInput) (*ec2.DescribeAvailabilityZonesOutput, error) {
+	return c.ec2Client.DescribeAvailabilityZones(ctx, input)
 }
 
-func (c *awsClient) DescribeSecurityGroups(input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
-	return c.ec2Client.DescribeSecurityGroups(input)
+func (c *awsClient) DescribeSecurityGroups(ctx context.Context, input *ec2.DescribeSecurityGroupsInput) (*ec2.DescribeSecurityGroupsOutput, error) {
+	return c.ec2Client.DescribeSecurityGroups(ctx, input)
 }
 
-func (c *awsClient) DescribePlacementGroups(input *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
-	return c.ec2Client.DescribePlacementGroups(input)
+func (c *awsClient) DescribePlacementGroups(ctx context.Context, input *ec2.DescribePlacementGroupsInput) (*ec2.DescribePlacementGroupsOutput, error) {
+	return c.ec2Client.DescribePlacementGroups(ctx, input)
 }
 
-func (c *awsClient) DescribeInstanceTypes(input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
-	return c.ec2Client.DescribeInstanceTypes(input)
+func (c *awsClient) DescribeInstanceTypes(ctx context.Context, input *ec2.DescribeInstanceTypesInput) (*ec2.DescribeInstanceTypesOutput, error) {
+	return c.ec2Client.DescribeInstanceTypes(ctx, input)
 }
 
-func (c *awsClient) DescribeHosts(input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
-	return c.ec2Client.DescribeHosts(input)
+func (c *awsClient) DescribeHosts(ctx context.Context, input *ec2.DescribeHostsInput) (*ec2.DescribeHostsOutput, error) {
+	return c.ec2Client.DescribeHosts(ctx, input)
 }
 
-func (c *awsClient) AllocateHosts(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
-	return c.ec2Client.AllocateHosts(input)
+func (c *awsClient) AllocateHosts(ctx context.Context, input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+	return c.ec2Client.AllocateHosts(ctx, input)
 }
 
-func (c *awsClient) ReleaseHosts(input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
-	return c.ec2Client.ReleaseHosts(input)
+func (c *awsClient) ReleaseHosts(ctx context.Context, input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+	return c.ec2Client.ReleaseHosts(ctx, input)
 }
 
-func (c *awsClient) RunInstances(input *ec2.RunInstancesInput) (*ec2.Reservation, error) {
-	return c.ec2Client.RunInstances(input)
+func (c *awsClient) RunInstances(ctx context.Context, input *ec2.RunInstancesInput) (*ec2.RunInstancesOutput, error) {
+	return c.ec2Client.RunInstances(ctx, input)
 }
 
-func (c *awsClient) DescribeInstances(input *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
-	return c.ec2Client.DescribeInstances(input)
+func (c *awsClient) DescribeInstances(ctx context.Context, input *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
+	return c.ec2Client.DescribeInstances(ctx, input)
 }
 
-func (c *awsClient) TerminateInstances(input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
-	return c.ec2Client.TerminateInstances(input)
+func (c *awsClient) TerminateInstances(ctx context.Context, input *ec2.TerminateInstancesInput) (*ec2.TerminateInstancesOutput, error) {
+	return c.ec2Client.TerminateInstances(ctx, input)
 }
 
-func (c *awsClient) DescribeVolumes(input *ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error) {
-	return c.ec2Client.DescribeVolumes(input)
+func (c *awsClient) DescribeVolumes(ctx context.Context, input *ec2.DescribeVolumesInput) (*ec2.DescribeVolumesOutput, error) {
+	return c.ec2Client.DescribeVolumes(ctx, input)
 }
 
-func (c *awsClient) CreateTags(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
-	return c.ec2Client.CreateTags(input)
+func (c *awsClient) CreateTags(ctx context.Context, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	return c.ec2Client.CreateTags(ctx, input)
 }
 
-func (c *awsClient) CreatePlacementGroup(input *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
-	return c.ec2Client.CreatePlacementGroup(input)
+func (c *awsClient) CreatePlacementGroup(ctx context.Context, input *ec2.CreatePlacementGroupInput) (*ec2.CreatePlacementGroupOutput, error) {
+	return c.ec2Client.CreatePlacementGroup(ctx, input)
 }
 
-func (c *awsClient) DeletePlacementGroup(input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
-	return c.ec2Client.DeletePlacementGroup(input)
+func (c *awsClient) DeletePlacementGroup(ctx context.Context, input *ec2.DeletePlacementGroupInput) (*ec2.DeletePlacementGroupOutput, error) {
+	return c.ec2Client.DeletePlacementGroup(ctx, input)
 }
 
-func (c *awsClient) RegisterInstancesWithLoadBalancer(input *elb.RegisterInstancesWithLoadBalancerInput) (*elb.RegisterInstancesWithLoadBalancerOutput, error) {
-	return c.elbClient.RegisterInstancesWithLoadBalancer(input)
+func (c *awsClient) RegisterInstancesWithLoadBalancer(ctx context.Context, input *elasticloadbalancing.RegisterInstancesWithLoadBalancerInput) (*elasticloadbalancing.RegisterInstancesWithLoadBalancerOutput, error) {
+	return c.elbClient.RegisterInstancesWithLoadBalancer(ctx, input)
 }
 
-func (c *awsClient) ELBv2DescribeLoadBalancers(input *elbv2.DescribeLoadBalancersInput) (*elbv2.DescribeLoadBalancersOutput, error) {
-	return c.elbv2Client.DescribeLoadBalancers(input)
+func (c *awsClient) ELBv2DescribeLoadBalancers(ctx context.Context, input *elasticloadbalancingv2.DescribeLoadBalancersInput) (*elasticloadbalancingv2.DescribeLoadBalancersOutput, error) {
+	return c.elbv2Client.DescribeLoadBalancers(ctx, input)
 }
 
-func (c *awsClient) ELBv2DescribeTargetGroups(input *elbv2.DescribeTargetGroupsInput) (*elbv2.DescribeTargetGroupsOutput, error) {
-	return c.elbv2Client.DescribeTargetGroups(input)
+func (c *awsClient) ELBv2DescribeTargetGroups(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetGroupsInput) (*elasticloadbalancingv2.DescribeTargetGroupsOutput, error) {
+	return c.elbv2Client.DescribeTargetGroups(ctx, input)
 }
 
-func (c *awsClient) ELBv2DescribeTargetHealth(input *elbv2.DescribeTargetHealthInput) (*elbv2.DescribeTargetHealthOutput, error) {
-	return c.elbv2Client.DescribeTargetHealth(input)
+func (c *awsClient) ELBv2DescribeTargetHealth(ctx context.Context, input *elasticloadbalancingv2.DescribeTargetHealthInput) (*elasticloadbalancingv2.DescribeTargetHealthOutput, error) {
+	return c.elbv2Client.DescribeTargetHealth(ctx, input)
 }
 
-func (c *awsClient) ELBv2RegisterTargets(input *elbv2.RegisterTargetsInput) (*elbv2.RegisterTargetsOutput, error) {
-	return c.elbv2Client.RegisterTargets(input)
+func (c *awsClient) ELBv2RegisterTargets(ctx context.Context, input *elasticloadbalancingv2.RegisterTargetsInput) (*elasticloadbalancingv2.RegisterTargetsOutput, error) {
+	return c.elbv2Client.RegisterTargets(ctx, input)
 }
 
-func (c *awsClient) ELBv2DeregisterTargets(input *elbv2.DeregisterTargetsInput) (*elbv2.DeregisterTargetsOutput, error) {
-	return c.elbv2Client.DeregisterTargets(input)
+func (c *awsClient) ELBv2DeregisterTargets(ctx context.Context, input *elasticloadbalancingv2.DeregisterTargetsInput) (*elasticloadbalancingv2.DeregisterTargetsOutput, error) {
+	return c.elbv2Client.DeregisterTargets(ctx, input)
 }
 
 // NewClient creates our client wrapper object for the actual AWS clients we use.
@@ -221,42 +221,37 @@ func (c *awsClient) ELBv2DeregisterTargets(input *elbv2.DeregisterTargetsInput) 
 // secret if defined (i.e. in the root cluster),
 // otherwise the IAM profile of the master where the actuator will run. (target clusters)
 func NewClient(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (Client, error) {
-	s, err := newAWSSession(ctrlRuntimeClient, secretName, namespace, region, configManagedClient)
+	cfg, customEndpoints, err := newAWSConfig(ctrlRuntimeClient, secretName, namespace, region, configManagedClient)
 	if err != nil {
 		return nil, err
 	}
 
 	return &awsClient{
-		ec2Client:   ec2.New(s),
-		elbClient:   elb.New(s),
-		elbv2Client: elbv2.New(s),
-		session:     s,
+		ec2Client:   ec2ClientFromConfig(cfg, customEndpoints),
+		elbClient:   elbClientFromConfig(cfg, customEndpoints),
+		elbv2Client: elbv2ClientFromConfig(cfg, customEndpoints),
+		cfg:         cfg,
 	}, nil
 }
 
 // NewClientFromKeys creates our client wrapper object for the actual AWS clients we use.
 // For authentication the underlying clients will use AWS credentials.
 func NewClientFromKeys(accessKey, secretAccessKey, region string) (Client, error) {
-	awsConfig := &aws.Config{
-		Region: aws.String(region),
-		Credentials: credentials.NewStaticCredentials(
-			accessKey,
-			secretAccessKey,
-			"",
-		),
-	}
-
-	s, err := session.NewSession(awsConfig)
+	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(),
+		awsconfig.WithRegion(region),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretAccessKey, "")),
+	)
 	if err != nil {
 		return nil, err
 	}
-	s.Handlers.Build.PushBackNamed(addProviderVersionToUserAgent)
+
+	cfg.APIOptions = append(cfg.APIOptions, addUserAgentMiddleware())
 
 	return &awsClient{
-		ec2Client:   ec2.New(s),
-		elbClient:   elb.New(s),
-		elbv2Client: elbv2.New(s),
-		session:     s,
+		ec2Client:   ec2.NewFromConfig(cfg),
+		elbClient:   elasticloadbalancing.NewFromConfig(cfg),
+		elbv2Client: elasticloadbalancingv2.NewFromConfig(cfg),
+		cfg:         cfg,
 	}, nil
 }
 
@@ -275,9 +270,9 @@ type regionCache struct {
 
 // RegionCache caches successful DescribeRegions API calls and region validation results.
 type RegionCache interface {
-	GetCachedDescribeRegions(awsSession *session.Session) (*ec2.DescribeRegionsOutput, error)
-	IsRegionValidated(awsSession *session.Session, region string) (bool, error)
-	SetRegionValidated(awsSession *session.Session, region string) error
+	GetCachedDescribeRegions(ctx context.Context, cfg aws.Config) (*ec2.DescribeRegionsOutput, error)
+	IsRegionValidated(ctx context.Context, cfg aws.Config, region string) (bool, error)
+	SetRegionValidated(ctx context.Context, cfg aws.Config, region string) error
 }
 
 // NewRegionCache creates a new empty DescribeRegionsData cache with lock.
@@ -290,8 +285,8 @@ func NewRegionCache() RegionCache {
 
 // GetCachedDescribeRegions returns DescribeRegionsOutput from DescribeRegions AWS API call.
 // It is cached to avoid AWS API calls on each reconcile loop.
-func (c *regionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec2.DescribeRegionsOutput, error) {
-	creds, err := awsSession.Config.Credentials.Get()
+func (c *regionCache) GetCachedDescribeRegions(ctx context.Context, cfg aws.Config) (*ec2.DescribeRegionsOutput, error) {
+	creds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -305,15 +300,14 @@ func (c *regionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec
 		return regionData.describeRegionsOutput, nil
 	}
 
-	currentRegion := awsSession.Config.Region
 	// Use default region to send our request
-	awsSession.Config.Region = aws.String("us-east-1")
-	describeRegionsOutput, err := ec2.New(awsSession).DescribeRegions(&ec2.DescribeRegionsInput{
+	cfgForRegions := cfg
+	cfgForRegions.Region = "us-east-1"
+	ec2Client := ec2.NewFromConfig(cfgForRegions)
+	describeRegionsOutput, err := ec2Client.DescribeRegions(ctx, &ec2.DescribeRegionsInput{
 		AllRegions: aws.Bool(true),
 		DryRun:     aws.Bool(false),
 	})
-	// Restore the original region
-	awsSession.Config.Region = currentRegion
 	if err != nil {
 		regionData.err = err
 		return nil, err
@@ -325,8 +319,8 @@ func (c *regionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec
 	return describeRegionsOutput, nil
 }
 
-func (c *regionCache) IsRegionValidated(awsSession *session.Session, region string) (bool, error) {
-	creds, err := awsSession.Config.Credentials.Get()
+func (c *regionCache) IsRegionValidated(ctx context.Context, cfg aws.Config, region string) (bool, error) {
+	creds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -343,8 +337,8 @@ func (c *regionCache) IsRegionValidated(awsSession *session.Session, region stri
 	return false, nil
 }
 
-func (c *regionCache) SetRegionValidated(awsSession *session.Session, region string) error {
-	creds, err := awsSession.Config.Credentials.Get()
+func (c *regionCache) SetRegionValidated(ctx context.Context, cfg aws.Config, region string) error {
+	creds, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return err
 	}
@@ -364,11 +358,11 @@ func (c *regionCache) SetRegionValidated(awsSession *session.Session, region str
 }
 
 // Check that region is in the DescribeRegions list and is opted in.
-func validateRegion(describeRegionsOutput *ec2.DescribeRegionsOutput, region string) (*ec2.Region, error) {
-	var regionData *ec2.Region
-	for _, currentRegion := range describeRegionsOutput.Regions {
-		if currentRegion != nil && *currentRegion.RegionName == region {
-			regionData = currentRegion
+func validateRegion(describeRegionsOutput *ec2.DescribeRegionsOutput, region string) (*ec2types.Region, error) {
+	var regionData *ec2types.Region
+	for i := range describeRegionsOutput.Regions {
+		if aws.ToString(describeRegionsOutput.Regions[i].RegionName) == region {
+			regionData = &describeRegionsOutput.Regions[i]
 			break
 		}
 	}
@@ -376,7 +370,7 @@ func validateRegion(describeRegionsOutput *ec2.DescribeRegionsOutput, region str
 	if regionData == nil {
 		return nil, fmt.Errorf("region %s is not a valid region", region)
 	}
-	if *regionData.OptInStatus == "not-opted-in" {
+	if aws.ToString(regionData.OptInStatus) == "not-opted-in" {
 		return nil, fmt.Errorf("region %s is not opted in", region)
 	}
 	klog.Infof("AWS reports region %s is valid", region)
@@ -387,76 +381,63 @@ func validateRegion(describeRegionsOutput *ec2.DescribeRegionsOutput, region str
 // This should behave the same as NewClient except it will validate the client configuration
 // (eg the region) before returning the client.
 func NewValidatedClient(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client, regionCache RegionCache) (Client, error) {
-	s, err := newAWSSession(ctrlRuntimeClient, secretName, namespace, region, configManagedClient)
+	cfg, customEndpoints, err := newAWSConfig(ctrlRuntimeClient, secretName, namespace, region, configManagedClient)
 	if err != nil {
 		return nil, err
 	}
 
-	validated, err := regionCache.IsRegionValidated(s, region)
+	ctx := context.Background()
+	validated, err := regionCache.IsRegionValidated(ctx, cfg, region)
 	if err != nil {
 		return nil, fmt.Errorf("could not check region validation cache: %w", err)
 	}
 
 	if !validated {
-		// Check that the endpoint can be resolved by the endpoint resolver.
-		// If the endpoint is not resolvable locally, we try to validate using the AWS API.
-		// If the endpoint is not known, it is not a standard or configured custom region.
-		// In that case, the client will likely not be able to connect
-		_, err = s.Config.EndpointResolver.EndpointFor("ec2", region, func(opts *endpoints.Options) {
-			opts.StrictMatching = true
-		})
+		// In SDK v2, endpoint resolution is permissive and resolves any region.
+		// We always validate via the DescribeRegions API to ensure the region is real and opted in.
+		klog.Infof("Region %s is not cached, validating using API", region)
+		var describeRegionsOutput *ec2.DescribeRegionsOutput
+		describeRegionsOutput, err = regionCache.GetCachedDescribeRegions(ctx, cfg)
 		if err != nil {
-			switch err.(type) {
-			case endpoints.UnknownEndpointError:
-				klog.Infof("Region %s is not recognized by aws-sdk, trying to validate using API", region)
-				var describeRegionsOutput *ec2.DescribeRegionsOutput
-				describeRegionsOutput, err = regionCache.GetCachedDescribeRegions(s)
-				if err != nil {
-					return nil, fmt.Errorf("could not retrieve region data: %w", err)
-				}
+			return nil, fmt.Errorf("could not retrieve region data: %w", err)
+		}
 
-				_, err = validateRegion(describeRegionsOutput, region)
-				if err != nil {
-					return nil, err
-				}
-				klog.V(4).Infof("Region %s validated via API, caching result", region)
-				if cacheErr := regionCache.SetRegionValidated(s, region); cacheErr != nil {
-					klog.V(4).Infof("Failed to cache region validation for %s: %v", region, cacheErr)
-				}
-			default:
-				return nil, fmt.Errorf("region %q not resolved: %w", region, err)
-			}
+		_, err = validateRegion(describeRegionsOutput, region)
+		if err != nil {
+			return nil, err
+		}
+		klog.V(4).Infof("Region %s validated via API, caching result", region)
+		if cacheErr := regionCache.SetRegionValidated(ctx, cfg, region); cacheErr != nil {
+			klog.V(4).Infof("Failed to cache region validation for %s: %v", region, cacheErr)
 		}
 	}
 
 	return &awsClient{
-		ec2Client:   ec2.New(s),
-		elbClient:   elb.New(s),
-		elbv2Client: elbv2.New(s),
-		session:     s,
+		ec2Client:   ec2ClientFromConfig(cfg, customEndpoints),
+		elbClient:   elbClientFromConfig(cfg, customEndpoints),
+		elbv2Client: elbv2ClientFromConfig(cfg, customEndpoints),
+		cfg:         cfg,
 	}, nil
 }
 
-func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (s *session.Session, err error) {
-	sessionOptions := session.Options{
-		Config: aws.Config{
-			Region: aws.String(region),
-		},
+func newAWSConfig(ctrlRuntimeClient client.Client, secretName, namespace, region string, configManagedClient client.Client) (cfg aws.Config, customEndpoints map[string]string, err error) {
+	optFns := []func(*awsconfig.LoadOptions) error{
+		awsconfig.WithRegion(region),
 	}
 
 	if secretName != "" {
 		var secret corev1.Secret
 		if err := ctrlRuntimeClient.Get(context.Background(), client.ObjectKey{Namespace: namespace, Name: secretName}, &secret); err != nil {
 			if apimachineryerrors.IsNotFound(err) {
-				return nil, machineapiapierrors.InvalidMachineConfiguration("aws credentials secret %s/%s: %v not found", namespace, secretName, err)
+				return aws.Config{}, nil, machineapiapierrors.InvalidMachineConfiguration("aws credentials secret %s/%s: %v not found", namespace, secretName, err)
 			}
-			return nil, err
+			return aws.Config{}, nil, err
 		}
 		sharedCredentialsFileMutex.Lock()
 		defer sharedCredentialsFileMutex.Unlock()
 		sharedCredsFile, err := sharedCredentialsFileFromSecret(&secret)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create shared credentials file from Secret: %v", err)
+			return aws.Config{}, nil, fmt.Errorf("failed to create shared credentials file from Secret: %v", err)
 		}
 
 		// Ensure the file gets deleted in any case.
@@ -466,70 +447,93 @@ func newAWSSession(ctrlRuntimeClient client.Client, secretName, namespace, regio
 			}
 		}()
 
-		sessionOptions.SharedConfigState = session.SharedConfigEnable
-		sessionOptions.SharedConfigFiles = []string{sharedCredsFile}
+		optFns = append(optFns,
+			awsconfig.WithSharedConfigProfile("default"),
+			awsconfig.WithSharedCredentialsFiles([]string{sharedCredsFile}),
+		)
 	}
 
-	// Resolve custom endpoints
-	if err := resolveEndpoints(&sessionOptions.Config, ctrlRuntimeClient, region); err != nil {
-		return nil, err
-	}
-
-	if err := useCustomCABundle(&sessionOptions, configManagedClient); err != nil {
-		return nil, fmt.Errorf("failed to set the custom CA bundle: %w", err)
+	if err := addCustomCABundle(&optFns, configManagedClient); err != nil {
+		return aws.Config{}, nil, fmt.Errorf("failed to set the custom CA bundle: %w", err)
 	}
 
 	// Otherwise default to relying on the IAM role of the masters where the actuator is running:
-	s, err = session.NewSessionWithOptions(sessionOptions)
+	cfg, err = awsconfig.LoadDefaultConfig(context.Background(), optFns...)
 	if err != nil {
-		return nil, err
+		return aws.Config{}, nil, err
 	}
 
-	s.Handlers.Build.PushBackNamed(addProviderVersionToUserAgent)
+	cfg.APIOptions = append(cfg.APIOptions, addUserAgentMiddleware())
 
-	return s, nil
+	// Resolve custom endpoints
+	customEndpoints, err = getCustomEndpoints(ctrlRuntimeClient)
+	if err != nil {
+		return aws.Config{}, nil, err
+	}
+
+	return cfg, customEndpoints, nil
 }
 
-// addProviderVersionToUserAgent is a named handler that will add cluster-api-provider-aws
+// addUserAgentMiddleware returns a middleware function that adds cluster-api-provider-aws
 // version information to requests made by the AWS SDK.
-var addProviderVersionToUserAgent = request.NamedHandler{
-	Name: "openshift.io/cluster-api-provider-aws",
-	Fn:   request.MakeAddToUserAgentHandler("openshift.io cluster-api-provider-aws", version.Version.String()),
+func addUserAgentMiddleware() func(*middleware.Stack) error {
+	return awsmiddleware.AddUserAgentKeyValue("openshift.io/cluster-api-provider-aws", version.Version.String())
 }
 
-func resolveEndpoints(awsConfig *aws.Config, ctrlRuntimeClient client.Client, region string) error {
+// getCustomEndpoints returns custom endpoint URLs from the Infrastructure object
+func getCustomEndpoints(ctrlRuntimeClient client.Client) (map[string]string, error) {
 	infra := &configv1.Infrastructure{}
 	infraName := client.ObjectKey{Name: GlobalInfrastuctureName}
 
 	if err := ctrlRuntimeClient.Get(context.Background(), infraName, infra); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Do nothing when custom endpoints are missing
 	if infra.Status.PlatformStatus == nil || infra.Status.PlatformStatus.AWS == nil {
-		return nil
+		return nil, nil
 	}
 
 	customEndpointsMap := buildCustomEndpointsMap(infra.Status.PlatformStatus.AWS.ServiceEndpoints)
 
 	if len(customEndpointsMap) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	customResolver := func(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
-		if url, ok := customEndpointsMap[service]; ok {
-			return endpoints.ResolvedEndpoint{
-				URL:           url,
-				SigningRegion: region,
-			}, nil
+	return customEndpointsMap, nil
+}
 
-		}
-		return endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
+// ec2ClientFromConfig creates an EC2 client with optional custom endpoint
+func ec2ClientFromConfig(cfg aws.Config, customEndpoints map[string]string) *ec2.Client {
+	opts := []func(*ec2.Options){}
+	if url, ok := customEndpoints["ec2"]; ok {
+		opts = append(opts, func(o *ec2.Options) {
+			o.BaseEndpoint = aws.String(url)
+		})
 	}
+	return ec2.NewFromConfig(cfg, opts...)
+}
 
-	awsConfig.EndpointResolver = endpoints.ResolverFunc(customResolver)
+// elbClientFromConfig creates an ELB Classic client with optional custom endpoint
+func elbClientFromConfig(cfg aws.Config, customEndpoints map[string]string) *elasticloadbalancing.Client {
+	opts := []func(*elasticloadbalancing.Options){}
+	if url, ok := customEndpoints["elasticloadbalancing"]; ok {
+		opts = append(opts, func(o *elasticloadbalancing.Options) {
+			o.BaseEndpoint = aws.String(url)
+		})
+	}
+	return elasticloadbalancing.NewFromConfig(cfg, opts...)
+}
 
-	return nil
+// elbv2ClientFromConfig creates an ELBv2 client with optional custom endpoint
+func elbv2ClientFromConfig(cfg aws.Config, customEndpoints map[string]string) *elasticloadbalancingv2.Client {
+	opts := []func(*elasticloadbalancingv2.Options){}
+	if url, ok := customEndpoints["elasticloadbalancingv2"]; ok {
+		opts = append(opts, func(o *elasticloadbalancingv2.Options) {
+			o.BaseEndpoint = aws.String(url)
+		})
+	}
+	return elasticloadbalancingv2.NewFromConfig(cfg, opts...)
 }
 
 // buildCustomEndpointsMap constructs a map that links endpoint name and it's url
@@ -590,9 +594,9 @@ func newConfigForStaticCreds(accessKey string, accessSecret string) []byte {
 	return buf.Bytes()
 }
 
-// useCustomCABundle will set up a custom CA bundle in the AWS options if a CA bundle is configured in the
+// addCustomCABundle will set up a custom CA bundle in the AWS options if a CA bundle is configured in the
 // kube cloud config.
-func useCustomCABundle(awsOptions *session.Options, configManagedClient client.Client) error {
+func addCustomCABundle(optFns *[]func(*awsconfig.LoadOptions) error, configManagedClient client.Client) error {
 	cm := &corev1.ConfigMap{}
 	switch err := configManagedClient.Get(
 		context.Background(),
@@ -611,6 +615,6 @@ func useCustomCABundle(awsOptions *session.Options, configManagedClient client.C
 		return nil
 	}
 	klog.Info("using a custom CA bundle")
-	awsOptions.CustomCABundle = strings.NewReader(caBundle)
+	*optFns = append(*optFns, awsconfig.WithCustomCABundle(strings.NewReader(caBundle)))
 	return nil
 }

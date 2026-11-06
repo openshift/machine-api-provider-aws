@@ -32,6 +32,21 @@ var notFoundFunc = func(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(404)
 }
 
+// imdsv2TokenHandler wraps a handler to handle IMDSv2 token requests
+// The v2 IMDS client first tries to get a token via PUT /latest/api/token
+// before making GET requests. We return a 404 for the token endpoint to
+// force fallback to IMDSv1, same as the real IMDS behavior on instances
+// that don't support IMDSv2.
+func imdsv2TokenHandler(next func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	return func(rw http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodPut && req.URL.Path == "/latest/api/token" {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		next(rw, req)
+	}
+}
+
 var _ = Describe("Handler Suite", func() {
 	var terminationServer *httptest.Server
 	var httpHandler http.Handler
@@ -185,7 +200,7 @@ var _ = Describe("Handler Suite", func() {
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError("error polling termination endpoint: EC2MetadataError: failed to make EC2Metadata request\n\n\tstatus code: 500, request id: ")))
+					Eventually(errs, 10*time.Second).Should(Receive(MatchError(ContainSubstring("error polling termination endpoint:"))))
 				})
 
 				It("should not delete the machine", func() {
@@ -202,7 +217,7 @@ var _ = Describe("Handler Suite", func() {
 				})
 
 				It("should return an error", func() {
-					Eventually(errs).Should(Receive(MatchError(ContainSubstring("RequestError: send request failed\ncaused by: Get \"/latest/meta-data/spot/termination-time#1://localhost\": unsupported protocol scheme \"\""))))
+					Eventually(errs, 10*time.Second).Should(Receive(MatchError(ContainSubstring("error polling termination endpoint:"))))
 				})
 
 				It("should not delete the machine", func() {
@@ -321,9 +336,10 @@ func (m *mockHTTPHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	m.handleFunc(rw, req)
 }
 
-// newMockHTTPHandler constructs a mockHTTPHandler with the given handleFunc
+// newMockHTTPHandler constructs a mockHTTPHandler with the given handleFunc.
+// It wraps the handler with IMDSv2 token handling to support the v2 IMDS client.
 func newMockHTTPHandler(handleFunc func(http.ResponseWriter, *http.Request)) http.Handler {
-	return &mockHTTPHandler{handleFunc: handleFunc}
+	return &mockHTTPHandler{handleFunc: imdsv2TokenHandler(handleFunc)}
 }
 
 // isClosed checks if a channel is closed already

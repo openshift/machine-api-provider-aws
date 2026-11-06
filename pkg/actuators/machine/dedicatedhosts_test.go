@@ -1,10 +1,12 @@
 package machine
 
 import (
+	"context"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/golang/mock/gomock"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/machine-api-provider-aws/pkg/client/mock"
@@ -200,7 +202,7 @@ func TestAllocateDedicatedHost(t *testing.T) {
 
 	instanceType := "m5.large"
 	availabilityZone := "us-east-1a"
-	tags := []*ec2.Tag{
+	tags := []ec2types.Tag{
 		{Key: aws.String("test-key"), Value: aws.String("test-value")},
 		{Key: aws.String("openshiftClusterID"), Value: aws.String("test-cluster")},
 	}
@@ -208,7 +210,7 @@ func TestAllocateDedicatedHost(t *testing.T) {
 
 	expectedHostID := "h-1234567890abcdef0"
 
-	mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).DoAndReturn(func(input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
+	mockAWSClient.EXPECT().AllocateHosts(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, input *ec2.AllocateHostsInput) (*ec2.AllocateHostsOutput, error) {
 		if *input.InstanceType != instanceType {
 			t.Errorf("expected instance type %s, got %s", instanceType, *input.InstanceType)
 		}
@@ -218,8 +220,8 @@ func TestAllocateDedicatedHost(t *testing.T) {
 		if *input.Quantity != 1 {
 			t.Errorf("expected quantity 1, got %d", *input.Quantity)
 		}
-		if *input.AutoPlacement != "off" {
-			t.Errorf("expected auto placement off, got %s", *input.AutoPlacement)
+		if input.AutoPlacement != ec2types.AutoPlacementOff {
+			t.Errorf("expected auto placement off, got %s", input.AutoPlacement)
 		}
 
 		// Verify tags were passed correctly
@@ -230,7 +232,7 @@ func TestAllocateDedicatedHost(t *testing.T) {
 		}
 
 		return &ec2.AllocateHostsOutput{
-			HostIds: []*string{aws.String(expectedHostID)},
+			HostIds: []string{expectedHostID},
 		}, nil
 	})
 
@@ -253,14 +255,14 @@ func TestReleaseDedicatedHost(t *testing.T) {
 	hostID := "h-1234567890abcdef0"
 	machineName := "test-machine"
 
-	mockAWSClient.EXPECT().ReleaseHosts(gomock.Any()).DoAndReturn(func(input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
-		if len(input.HostIds) != 1 || *input.HostIds[0] != hostID {
+	mockAWSClient.EXPECT().ReleaseHosts(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, input *ec2.ReleaseHostsInput) (*ec2.ReleaseHostsOutput, error) {
+		if len(input.HostIds) != 1 || input.HostIds[0] != hostID {
 			t.Errorf("expected host ID %s, got %v", hostID, input.HostIds)
 		}
 
 		return &ec2.ReleaseHostsOutput{
-			Successful:   []*string{aws.String(hostID)},
-			Unsuccessful: []*ec2.UnsuccessfulItem{},
+			Successful:   []string{hostID},
+			Unsuccessful: []ec2types.UnsuccessfulItem{},
 		}, nil
 	})
 
@@ -439,9 +441,9 @@ func TestTagBYODedicatedHost(t *testing.T) {
 	clusterID := "test-cluster-id"
 	machineName := "test-machine"
 
-	mockAWSClient.EXPECT().CreateTags(gomock.Any()).DoAndReturn(func(input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
+	mockAWSClient.EXPECT().CreateTags(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, input *ec2.CreateTagsInput) (*ec2.CreateTagsOutput, error) {
 		// Verify the host ID
-		if len(input.Resources) != 1 || *input.Resources[0] != hostID {
+		if len(input.Resources) != 1 || input.Resources[0] != hostID {
 			t.Errorf("expected host ID %s, got %v", hostID, input.Resources)
 		}
 

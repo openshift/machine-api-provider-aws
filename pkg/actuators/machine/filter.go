@@ -19,8 +19,8 @@ package machine
 import (
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 const (
@@ -36,9 +36,9 @@ func clusterFilterKey(name string) string {
 	return fmt.Sprint(clusterFilterKeyPrefix, name)
 }
 
-func clusterFilter(name string) *ec2.Filter {
-	return &ec2.Filter{
+func clusterFilter(name string) ec2types.Filter {
+	return ec2types.Filter{
 		Name:   awsTagFilter(clusterFilterKey(name)),
-		Values: aws.StringSlice([]string{clusterFilterValue}),
+		Values: []string{clusterFilterValue},
 	}
 }

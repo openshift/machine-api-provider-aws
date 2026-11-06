@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -411,24 +411,24 @@ func TestReconcile(t *testing.T) {
 
 func TestNormalizeArchitecture(t *testing.T) {
 	testCases := []struct {
-		architecture string
+		architecture ec2types.ArchitectureType
 		expected     normalizedArch
 	}{
 		{
-			architecture: ec2.ArchitectureTypeX8664,
+			architecture: ec2types.ArchitectureTypeX8664,
 			expected:     ArchitectureAmd64,
 		},
 		{
-			architecture: ec2.ArchitectureTypeArm64,
+			architecture: ec2types.ArchitectureTypeArm64,
 			expected:     ArchitectureArm64,
 		},
 		{
-			architecture: "unknown",
+			architecture: ec2types.ArchitectureType("unknown"),
 			expected:     ArchitectureAmd64,
 		},
 	}
 	for _, tc := range testCases {
-		t.Run(tc.architecture, func(tt *testing.T) {
+		t.Run(string(tc.architecture), func(tt *testing.T) {
 			g := NewWithT(tt)
 			g.Expect(normalizeArchitecture(tc.architecture)).To(Equal(tc.expected))
 		})

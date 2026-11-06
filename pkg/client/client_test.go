@@ -1,16 +1,16 @@
 package client
 
 import (
-	"fmt"
-	"io/ioutil"
+	"context"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,18 +61,27 @@ func TestUseCustomCABundle(t *testing.T) {
 				resources = append(resources, tc.cm)
 			}
 			ctrlRuntimeClient := fake.NewClientBuilder().WithRuntimeObjects(resources...).Build()
-			awsOptions := &session.Options{}
-			err := useCustomCABundle(awsOptions, ctrlRuntimeClient)
+			optFns := []func(*awsconfig.LoadOptions) error{}
+			err := addCustomCABundle(&optFns, ctrlRuntimeClient)
 			if err != nil {
-				t.Fatalf("unexpected error from useCustomCABundle: %v", err)
+				t.Fatalf("unexpected error from addCustomCABundle: %v", err)
 			}
 			actualCABundle := ""
-			if awsOptions.CustomCABundle != nil {
-				bundleBytes, err := ioutil.ReadAll(awsOptions.CustomCABundle)
-				if err != nil {
-					t.Fatalf("unexpected error reading bundle: %v", err)
+			if len(optFns) > 0 {
+				// Apply options and check the CA bundle by loading a config
+				opts := awsconfig.LoadOptions{}
+				for _, fn := range optFns {
+					if err := fn(&opts); err != nil {
+						t.Fatalf("unexpected error applying option: %v", err)
+					}
 				}
-				actualCABundle = string(bundleBytes)
+				if opts.CustomCABundle != nil {
+					bundleBytes, err := io.ReadAll(opts.CustomCABundle)
+					if err != nil {
+						t.Fatalf("unexpected error reading bundle: %v", err)
+					}
+					actualCABundle = string(bundleBytes)
+				}
 			}
 			if a, e := actualCABundle, tc.expectedCABundle; a != e {
 				t.Errorf("unexpected CA bundle: expected=%s; got %s", e, a)
@@ -81,18 +90,20 @@ func TestUseCustomCABundle(t *testing.T) {
 	}
 }
 
-func testSession(accessKeyID string) *session.Session {
-	return session.Must(session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(accessKeyID, "secret", "token"),
-		Region:      aws.String("us-east-1"),
-	}))
+func testConfig(accessKeyID string) aws.Config {
+	cfg, _ := awsconfig.LoadDefaultConfig(context.TODO(),
+		awsconfig.WithRegion("us-east-1"),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, "secret", "token")),
+	)
+	return cfg
 }
 
 func TestRegionValidationCacheMiss(t *testing.T) {
 	cache := NewRegionCache()
-	sess := testSession("AKID-A")
+	cfg := testConfig("AKID-A")
+	ctx := context.Background()
 
-	validated, err := cache.IsRegionValidated(sess, "mx-central-1")
+	validated, err := cache.IsRegionValidated(ctx, cfg, "mx-central-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -103,13 +114,14 @@ func TestRegionValidationCacheMiss(t *testing.T) {
 
 func TestRegionValidationCacheHit(t *testing.T) {
 	cache := NewRegionCache()
-	sess := testSession("AKID-A")
+	cfg := testConfig("AKID-A")
+	ctx := context.Background()
 
-	if err := cache.SetRegionValidated(sess, "mx-central-1"); err != nil {
+	if err := cache.SetRegionValidated(ctx, cfg, "mx-central-1"); err != nil {
 		t.Fatalf("unexpected error from SetRegionValidated: %v", err)
 	}
 
-	validated, err := cache.IsRegionValidated(sess, "mx-central-1")
+	validated, err := cache.IsRegionValidated(ctx, cfg, "mx-central-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -123,9 +135,10 @@ func TestRegionValidationCacheExpiry(t *testing.T) {
 		data:  map[string]DescribeRegionsData{},
 		mutex: sync.RWMutex{},
 	}
-	sess := testSession("AKID-A")
+	cfg := testConfig("AKID-A")
+	ctx := context.Background()
 
-	if err := c.SetRegionValidated(sess, "mx-central-1"); err != nil {
+	if err := c.SetRegionValidated(ctx, cfg, "mx-central-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -134,7 +147,7 @@ func TestRegionValidationCacheExpiry(t *testing.T) {
 	data.lastUpdated = time.Now().Add(-awsRegionsCacheExpirationDuration - time.Minute)
 	c.data["AKID-A"] = data
 
-	validated, err := c.IsRegionValidated(sess, "mx-central-1")
+	validated, err := c.IsRegionValidated(ctx, cfg, "mx-central-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -145,14 +158,15 @@ func TestRegionValidationCacheExpiry(t *testing.T) {
 
 func TestRegionValidationCachePerCredentialIsolation(t *testing.T) {
 	cache := NewRegionCache()
-	sessA := testSession("AKID-A")
-	sessB := testSession("AKID-B")
+	cfgA := testConfig("AKID-A")
+	cfgB := testConfig("AKID-B")
+	ctx := context.Background()
 
-	if err := cache.SetRegionValidated(sessA, "mx-central-1"); err != nil {
+	if err := cache.SetRegionValidated(ctx, cfgA, "mx-central-1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	validated, err := cache.IsRegionValidated(sessB, "mx-central-1")
+	validated, err := cache.IsRegionValidated(ctx, cfgB, "mx-central-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,21 +180,32 @@ type spyTransport struct {
 }
 
 func (s *spyTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, fmt.Errorf("not implemented")
+	return nil, nil
 }
 
 func (s *spyTransport) CloseIdleConnections() {
 	s.closed = true
 }
 
+type spyHTTPClient struct {
+	transport *spyTransport
+}
+
+func (s *spyHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	return s.transport.RoundTrip(req)
+}
+
+func (s *spyHTTPClient) CloseIdleConnections() {
+	s.transport.CloseIdleConnections()
+}
+
 func TestCloseIdleConnectionsClosesTransport(t *testing.T) {
 	spy := &spyTransport{}
 	c := &awsClient{
-		session: session.Must(session.NewSession(&aws.Config{
-			Region:      aws.String("us-east-1"),
-			Credentials: credentials.NewStaticCredentials("id", "secret", "token"),
-			HTTPClient:  &http.Client{Transport: spy},
-		})),
+		cfg: aws.Config{
+			Region:     "us-east-1",
+			HTTPClient: &spyHTTPClient{transport: spy},
+		},
 	}
 	c.CloseIdleConnections()
 	if !spy.closed {
@@ -188,7 +213,7 @@ func TestCloseIdleConnectionsClosesTransport(t *testing.T) {
 	}
 }
 
-func TestCloseIdleConnectionsNilSession(t *testing.T) {
+func TestCloseIdleConnectionsNilConfig(t *testing.T) {
 	c := &awsClient{}
 	c.CloseIdleConnections()
 }

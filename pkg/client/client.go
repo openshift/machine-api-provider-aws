@@ -319,6 +319,13 @@ func (c *regionCache) GetCachedDescribeRegions(awsSession *session.Session) (*ec
 		return nil, err
 	}
 
+	// HACK: the new region me-west-1 is not returned by the API at the moment.
+	describeRegionsOutput.Regions = append(describeRegionsOutput.Regions, &ec2.Region{
+		RegionName:  new("me-west-1"),
+		OptInStatus: new("opted-in"),
+		Endpoint:    new("ec2.me-west-1.amazonaws.com"),
+	})
+
 	regionData.describeRegionsOutput = describeRegionsOutput
 	regionData.lastUpdated = time.Now()
 	c.data[creds.AccessKeyID] = regionData

@@ -264,6 +264,52 @@ func TestMachineEvents(t *testing.T) {
 	}
 }
 
+func TestDedicatedHostCapacityRequeueDelay(t *testing.T) {
+	cases := []struct {
+		name       string
+		blockedFor time.Duration
+		expected   time.Duration
+	}{
+		{
+			name:       "newly blocked",
+			blockedFor: 0,
+			expected:   dedicatedHostCapacityRequeueAfter,
+		},
+		{
+			name:       "still within the first window",
+			blockedFor: 30 * time.Second,
+			expected:   dedicatedHostCapacityRequeueAfter,
+		},
+		{
+			name:       "one doubled window in",
+			blockedFor: 2 * time.Minute,
+			expected:   2 * dedicatedHostCapacityRequeueAfter,
+		},
+		{
+			name:       "several doubled windows in",
+			blockedFor: 4 * time.Minute,
+			expected:   4 * dedicatedHostCapacityRequeueAfter,
+		},
+		{
+			name:       "long drought is capped",
+			blockedFor: 6 * time.Hour,
+			expected:   dedicatedHostCapacityRequeueMaxAfter,
+		},
+		{
+			name:       "negative elapsed keeps the base delay",
+			blockedFor: -time.Minute,
+			expected:   dedicatedHostCapacityRequeueAfter,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(dedicatedHostCapacityRequeueDelay(tc.blockedFor)).To(Equal(tc.expected))
+		})
+	}
+}
+
 // TestCreateDedicatedHostCapacityRequeue verifies that when machine creation
 // is blocked by an AWS dedicated host capacity shortage, Create requeues after
 // a delay instead of erroring out, and emits the distinct
@@ -405,6 +451,17 @@ func TestCreateDedicatedHostCapacityRequeue(t *testing.T) {
 	g.Expect(condition).ToNot(BeNil())
 	g.Expect(condition.Reason).To(Equal(DedicatedHostCapacityUnavailableConditionReason))
 	g.Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+
+	// A machine that has been blocked for longer backs off further: the delay
+	// is derived from the persisted MachineCreation condition, so it also
+	// survives actuator restarts.
+	condition.LastTransitionTime = metav1.NewTime(time.Now().Add(-time.Hour))
+	machine.Status.ProviderStatus, err = RawExtensionFromProviderStatus(providerStatus)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	var longBlockedRequeueErr *machinecontroller.RequeueAfterError
+	g.Expect(errors.As(actuator.Create(ctx, machine), &longBlockedRequeueErr)).To(BeTrue())
+	g.Expect(longBlockedRequeueErr.RequeueAfter).To(Equal(dedicatedHostCapacityRequeueMaxAfter))
 }
 
 func TestHandleMachineErrors(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	awsclient "github.com/openshift/machine-api-provider-aws/pkg/client"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -382,6 +383,17 @@ func stubInvalidNetworkInterfaceType() *machinev1beta1.AWSMachineProviderConfig 
 func stubInvalidInstanceTenancy() *machinev1beta1.AWSMachineProviderConfig {
 	pc := stubProviderConfig()
 	pc.Placement.Tenancy = "invalid"
+	return pc
+}
+
+func stubDynamicDedicatedHostAllocation() *machinev1beta1.AWSMachineProviderConfig {
+	pc := stubProviderConfig()
+	pc.Placement.Host = &machinev1beta1.HostPlacement{
+		Affinity: ptr.To(machinev1beta1.HostAffinityDedicatedHost),
+		DedicatedHost: &machinev1beta1.DedicatedHost{
+			AllocationStrategy: ptr.To(AllocationStrategyDynamic),
+		},
+	}
 	return pc
 }
 

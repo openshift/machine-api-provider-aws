@@ -1,5 +1,5 @@
 ## workspace
-# cel.dev/expr v0.25.1
+# cel.dev/expr v0.25.2
 ## explicit; go 1.23.0
 cel.dev/expr
 # github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c
@@ -530,8 +530,8 @@ github.com/robfig/cron/v3
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/spf13/afero v1.12.0
-## explicit; go 1.21
+# github.com/spf13/afero v1.15.0
+## explicit; go 1.23.0
 github.com/spf13/afero
 github.com/spf13/afero/internal/common
 github.com/spf13/afero/mem
@@ -758,7 +758,7 @@ google.golang.org/genproto/googleapis/api/httpbody
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.82.1
+# google.golang.org/grpc v1.83.2
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes

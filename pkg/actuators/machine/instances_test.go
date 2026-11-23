@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	gmg "github.com/onsi/gomega"
 
 	"github.com/aws/aws-sdk-go/aws"
+	awserr "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
 	configv1 "github.com/openshift/api/config/v1"
@@ -481,10 +483,16 @@ func TestLaunchInstance(t *testing.T) {
 		imageErr            error
 		instancesOutput     *ec2.Reservation
 		instancesErr        error
+		allocateHostsOutput *ec2.AllocateHostsOutput
+		allocateHostsErr    error
 		objects             []runtime.Object
 		succeeds            bool
 		runInstancesInput   *ec2.RunInstancesInput
 		infra               *configv1.Infrastructure
+		// wantCapacityError additionally asserts, for a failing case, that the
+		// error is a retryable *insufficientHostCapacityError rather than a
+		// terminal invalid-configuration MachineError.
+		wantCapacityError bool
 	}{
 		{
 			name: "Security groups with a filter",
@@ -1284,6 +1292,25 @@ func TestLaunchInstance(t *testing.T) {
 				},
 			},
 		},
+		{
+			// A dynamic dedicated host allocation failure due to insufficient
+			// AWS capacity must surface as a retryable typed error, not be
+			// misclassified as an invalid machine configuration (which would
+			// terminally fail the Machine).
+			name:           "Dynamic dedicated host allocation fails on insufficient capacity",
+			providerConfig: stubDynamicDedicatedHostAllocation(),
+			securityGroupOutput: &ec2.DescribeSecurityGroupsOutput{
+				SecurityGroups: []*ec2.SecurityGroup{
+					{GroupId: aws.String("groupID")},
+				},
+			},
+			subnetOutput: stubDescribeSubnetsOutput(),
+			zonesOutput:  stubDescribeAvailabilityZonesOutputDefault(),
+			imageOutput:  &ec2.DescribeImagesOutput{},
+			allocateHostsErr: awserr.New(insufficientHostCapacityErrorCode,
+				"We currently do not have sufficient dedicated host capacity", nil),
+			wantCapacityError: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1295,6 +1322,7 @@ func TestLaunchInstance(t *testing.T) {
 			mockAWSClient.EXPECT().DescribeSubnets(gomock.Any()).Return(tc.subnetOutput, tc.subnetErr).AnyTimes()
 			mockAWSClient.EXPECT().DescribeImages(gomock.Any()).Return(tc.imageOutput, tc.imageErr).AnyTimes()
 			mockAWSClient.EXPECT().RunInstances(tc.runInstancesInput).Return(tc.instancesOutput, tc.instancesErr).AnyTimes()
+			mockAWSClient.EXPECT().AllocateHosts(gomock.Any()).Return(tc.allocateHostsOutput, tc.allocateHostsErr).AnyTimes()
 
 			fakeClient := fake.NewFakeClient(tc.objects...)
 
@@ -1307,6 +1335,24 @@ func TestLaunchInstance(t *testing.T) {
 			} else {
 				if tc.succeeds {
 					t.Errorf("Call to launchInstance did not succeed as expected")
+				}
+			}
+
+			if tc.wantCapacityError {
+				var capacityErr *insufficientHostCapacityError
+				if !errors.As(launchErr, &capacityErr) {
+					t.Fatalf("expected an insufficientHostCapacityError, got: %v", launchErr)
+				}
+				if capacityErr.instanceType != tc.providerConfig.InstanceType {
+					t.Errorf("expected instance type %q, got %q", tc.providerConfig.InstanceType, capacityErr.instanceType)
+				}
+				if capacityErr.availabilityZone != tc.providerConfig.Placement.AvailabilityZone {
+					t.Errorf("expected availability zone %q, got %q", tc.providerConfig.Placement.AvailabilityZone, capacityErr.availabilityZone)
+				}
+
+				var machineErr *mapierrors.MachineError
+				if errors.As(launchErr, &machineErr) && machineErr.Reason == machinev1beta1.InvalidConfigurationMachineError {
+					t.Errorf("a capacity shortage must not be an invalid machine configuration: %v", launchErr)
 				}
 			}
 		})

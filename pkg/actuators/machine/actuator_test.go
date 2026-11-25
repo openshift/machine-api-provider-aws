@@ -148,6 +148,29 @@ func TestMachineEvents(t *testing.T) {
 			gs.Expect(err).ToNot(HaveOccurred())
 			gs.Expect(stubMachine).ToNot(BeNil())
 
+			// The OpenShift envtest kube-apiserver records KubeAPIReadyz in this
+			// namespace. Clear events before the case, and again when it returns,
+			// so that event is not counted and a failed case cannot leak into the next one.
+			clearEvents := func() error {
+				existing := &v1.EventList{}
+				if err := k8sClient.List(ctx, existing, client.InNamespace(machine.Namespace)); err != nil {
+					return err
+				}
+				for i := range existing.Items {
+					if err := k8sClient.Delete(ctx, &existing.Items[i]); err != nil {
+						return err
+					}
+				}
+				if len(existing.Items) != 0 {
+					return fmt.Errorf("%d events still present", len(existing.Items))
+				}
+				return nil
+			}
+			gs.Eventually(clearEvents, timeout).Should(Succeed())
+			defer func() {
+				_ = clearEvents()
+			}()
+
 			// Create the machine
 			gs.Expect(k8sClient.Create(ctx, machine)).To(Succeed())
 			defer func() {
@@ -246,10 +269,6 @@ func TestMachineEvents(t *testing.T) {
 			gs.Eventually(waitForEvent, timeout).Should(Succeed())
 
 			gs.Expect(eventList.Items[0].Message).To(Equal(tc.event))
-
-			for i := range eventList.Items {
-				gs.Expect(k8sClient.Delete(ctx, &eventList.Items[i])).To(Succeed())
-			}
 		})
 	}
 }

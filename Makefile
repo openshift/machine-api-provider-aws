@@ -13,7 +13,13 @@
 # limitations under the License.
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26
+# OCP 4.15 uses Kubernetes 1.28. openshift/kubernetes release-4.15 is v1.28.15,
+# which is also the 1.28 asset published to the OpenShift envtest index.
+# The legacy kubebuilder-tools bucket returns 401, and 1.26 is not published there.
+ENVTEST_K8S_VERSION = 1.28.15
+ENVTEST_OS ?= $(shell go env GOOS)
+ENVTEST_ARCH ?= $(shell go env GOARCH)
+ENVTEST_ASSETS_URL = https://storage.googleapis.com/openshift-kubebuilder-tools/envtest-v$(ENVTEST_K8S_VERSION)-$(ENVTEST_OS)-$(ENVTEST_ARCH).tar.gz
 
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
 ENVTEST = go run ${PROJECT_DIR}/vendor/sigs.k8s.io/controller-runtime/tools/setup-envtest
@@ -110,7 +116,7 @@ check: fmt vet lint test # Check your code
 
 .PHONY: unit
 unit: # Run unit test
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path --bin-dir $(PROJECT_DIR)/bin)" ./hack/ci-test.sh
+	KUBEBUILDER_ASSETS="$(shell mkdir -p $(PROJECT_DIR)/bin && curl -fsSL $(ENVTEST_ASSETS_URL) | $(ENVTEST) sideload $(ENVTEST_K8S_VERSION) --bin-dir $(PROJECT_DIR)/bin -p path)" ./hack/ci-test.sh
 
 .PHONY: test-e2e
 test-e2e: ## Run e2e tests

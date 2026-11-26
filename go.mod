@@ -13,6 +13,7 @@ require (
 	github.com/onsi/gomega v1.31.1
 	github.com/openshift/api v0.0.0-20240124164020-e2ce40831f2e
 	github.com/openshift/machine-api-operator v0.2.1-0.20240125175440-c9de8bda0dd1
+	golang.org/x/lint v0.0.0-20241112194109-818c5a804067
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
 	k8s.io/client-go v0.29.0

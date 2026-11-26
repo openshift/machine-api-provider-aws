@@ -148,6 +148,15 @@ func TestMachineEvents(t *testing.T) {
 			gs.Expect(err).ToNot(HaveOccurred())
 			gs.Expect(stubMachine).ToNot(BeNil())
 
+			// kube-apiserver 1.27+ records a one-shot "readyz=true" event in the
+			// default namespace. Drop existing events so this case only observes
+			// the actuator event.
+			eventList := &v1.EventList{}
+			gs.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+			for i := range eventList.Items {
+				gs.Expect(k8sClient.Delete(ctx, &eventList.Items[i])).To(Succeed())
+			}
+
 			// Create the machine
 			gs.Expect(k8sClient.Create(ctx, machine)).To(Succeed())
 			defer func() {
@@ -233,9 +242,8 @@ func TestMachineEvents(t *testing.T) {
 			actuator := NewActuator(params)
 			tc.operation(actuator, machine)
 
-			eventList := &v1.EventList{}
-			waitForEvent := func() error {
-				gs.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
+			waitForEvent := func(g Gomega) error {
+				g.Expect(k8sClient.List(ctx, eventList, client.InNamespace(machine.Namespace))).To(Succeed())
 				if len(eventList.Items) != 1 {
 					errorMsg := fmt.Sprintf("Expected len 1, got %d", len(eventList.Items))
 					return errors.New(errorMsg)

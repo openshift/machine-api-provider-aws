@@ -363,6 +363,10 @@ go.uber.org/zap/zapcore
 # golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 ## explicit; go 1.18
 golang.org/x/exp/maps
+# golang.org/x/lint v0.0.0-20241112194109-818c5a804067
+## explicit; go 1.11
+golang.org/x/lint
+golang.org/x/lint/golint
 # golang.org/x/mod v0.14.0
 ## explicit; go 1.18
 golang.org/x/mod/internal/lazyregexp
